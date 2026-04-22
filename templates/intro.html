@@ -1,0 +1,138 @@
+{% extends 'index.html' %}
+
+{% block content %}
+
+<!-- 3D CANVAS -->
+<div id="bg3d" style="position:fixed; top:0; left:0; z-index:-1;"></div>
+
+<center style="color:#00f5c4; margin-top:50px;">
+
+    <h1 style="text-shadow:0 0 20px #00f5c4;">
+        ⚡ Energy Consumption Prediction ⚡
+    </h1>
+
+    {% if prediction_text %}
+        <h2>{{ prediction_text }}</h2>
+    {% endif %}
+
+    {% if status %}
+        <h3 style="color:cyan;">{{ status }}</h3>
+        <p>{{ message }}</p>
+    {% endif %}
+
+    {% if cost %}
+        <h3 style="color:lime;">Estimated Cost: ₹{{ cost }}</h3>
+        <p><i>Note: Cost is approximate</i></p>
+    {% endif %}
+
+    {% if time %}
+        <p>Time (Auto): {{ time }} hrs</p>
+        <p>Day (Auto): {{ day }}</p>
+    {% endif %}
+</center>
+
+<br><br>
+
+<center>
+<form method="POST" action="{{ url_for('prediction') }}" style="
+    width:320px;
+    padding:20px;
+    background:rgba(0,0,0,0.6);
+    border-radius:15px;
+    box-shadow:0 0 20px #00f5c4;
+">
+
+    <input type="number" name="temperature" placeholder="Temperature" required><br><br>
+    <input type="number" name="humidity" placeholder="Humidity" required><br><br>
+    <input type="number" name="wind_speed" placeholder="Wind Speed" required><br><br>
+    <input type="number" name="solar_radiation" placeholder="Solar Radiation" required><br><br>
+    <input type="number" name="peak_hour_indicator" placeholder="Peak Hour Indicator" required><br><br>
+
+    <button type="submit" style="
+        padding:10px 20px;
+        background:#00f5c4;
+        border:none;
+        cursor:pointer;
+        box-shadow:0 0 10px #00f5c4;
+    ">
+        ⚡ Predict
+    </button>
+
+</form>
+</center>
+
+<!-- ALERT SOUND -->
+<script>
+{% if message and "ALERT" in message %}
+alert("⚠️ WARNING! High Energy Usage!");
+
+var audio = new Audio("https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg");
+audio.play().catch(() => console.log("Sound blocked"));
+{% endif %}
+</script>
+
+<!-- THREE JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+// SCENE
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.z = 5;
+
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.getElementById("bg3d").appendChild(renderer.domElement);
+
+// LIGHT
+const light = new THREE.PointLight(0x00f5c4, 2, 100);
+light.position.set(0,2,5);
+scene.add(light);
+
+// ROTATING TORUS (electric ring)
+const geometry = new THREE.TorusGeometry(1, 0.3, 16, 100);
+const material = new THREE.MeshBasicMaterial({color:0x00f5c4, wireframe:true});
+const torus = new THREE.Mesh(geometry, material);
+scene.add(torus);
+
+// PARTICLES
+const particlesGeometry = new THREE.BufferGeometry();
+const particlesCount = 300;
+const posArray = new Float32Array(particlesCount * 3);
+
+for(let i=0;i<particlesCount*3;i++){
+    posArray[i] = (Math.random()-0.5)*10;
+}
+
+particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray,3));
+
+const particlesMaterial = new THREE.PointsMaterial({
+    size:0.02,
+    color:0x00f5c4
+});
+
+const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+scene.add(particlesMesh);
+
+// LIGHTNING FLASH
+function lightning(){
+    light.intensity = 5;
+    setTimeout(()=> light.intensity = 2, 100);
+}
+setInterval(lightning, 4000);
+
+// ANIMATION
+function animate(){
+    requestAnimationFrame(animate);
+
+    torus.rotation.x += 0.01;
+    torus.rotation.y += 0.01;
+
+    particlesMesh.rotation.y += 0.001;
+
+    renderer.render(scene, camera);
+}
+animate();
+</script>
+
+{% endblock %}

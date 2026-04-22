@@ -1,0 +1,50 @@
+
+{% extends 'home.html' %}
+
+{% block content %}
+
+  <section style="margin-top: -20px;" class="contact_section layout_padding">
+    <div class="container">
+      {% if accuracy %}
+      <center>
+          <h2 style="color: black;">Algorithm : {{ algorithm }} <br>
+            Error Rate: {{ '%.2f'|format(accuracy[0]) }}</h2>
+          <ul>
+              <p>Mean Absolute Error: {{ '%.2f'|format(accuracy[1]['Mean Absolute Error']) }}</p>
+              <p>Mean Square Error: {{ '%.2f'|format(accuracy[1]['Mean Square Error']) }}</p>
+              <p>Root Mean Square Error: {{ '%.2f'|format(accuracy[1]['Root Mean Square Error']) }}</p>
+              <p>R2 Score: {{ '%.2f'|format(accuracy[1]['R2 Score']) }}</p>
+          </ul>
+      </center>
+      {% endif %} 
+
+      <div class="row">
+        <div style="margin-left: 300px; margin-top: 20px;" class="col-md-6">
+          <form action="{{url_for('algorithm')}}" method="post">
+
+            <div>
+              <center>
+                <select style="width: 400px; height: 50px; border-radius: 5px; padding: 10px;" class="form-select" name="algorithm" aria-label="Default select example" required>
+                    <option selected>Select Algorithm</option>
+                    <option value="Linear Regression">Linear Regression</option>
+                    <option value="RNN">Recurrent Neural Network</option>
+                    <option value="LSTM">Long Short Term Memory</option>
+                    <option value="Stacked LSTM">Stacked LSTM</option>
+                    <option value="GRU">Gated Recurrent Unit</option>
+                  </select>
+              </center>
+            </div><br>
+
+            <div class="d-flex ">
+              <center>
+                <button style="margin-left: 80px; border-radius: 5px; width: 400px;" type="submit">
+                  Check Accuracy!
+                </button>
+              </center>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+{% endblock %}

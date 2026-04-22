@@ -1,0 +1,2382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Energy — Electricity Consumption & Management System</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+/* ══════════════ CUSTOM CURSOR — thunder bolt ══════════════ */
+*{cursor:none!important;}
+/* The bolt SVG cursor — drawn via clip+transform */
+#c-bolt{
+  position:fixed;pointer-events:none;z-index:99999;
+  width:22px;height:32px;
+  top:0;left:0;
+  transform-origin:top left;
+  filter:drop-shadow(0 0 6px var(--elec)) drop-shadow(0 0 12px rgba(0,200,240,.6));
+  transition:filter .15s;
+  opacity:.92;
+}
+#c-bolt svg{width:100%;height:100%;}
+/* Glow halo that follows slightly behind */
+#c-halo{
+  position:fixed;pointer-events:none;z-index:99998;
+  width:32px;height:32px;border-radius:50%;
+  top:0;left:0;
+  background:radial-gradient(circle,rgba(0,200,240,.22) 0%,transparent 70%);
+  transform:translate(-50%,-50%);
+  transition:opacity .15s;
+}
+/* On hover: bolt turns gold, halo turns gold */
+.c-hover #c-bolt{
+  filter:drop-shadow(0 0 8px var(--volt)) drop-shadow(0 0 18px rgba(255,215,0,.7));
+}
+.c-hover #c-halo{background:radial-gradient(circle,rgba(255,215,0,.28) 0%,transparent 70%);}
+/* Click burst */
+#c-burst{
+  position:fixed;pointer-events:none;z-index:99997;
+  font-size:18px;line-height:1;
+  top:0;left:0;
+  animation:burstAnim .5s ease-out forwards;
+}
+@keyframes burstAnim{
+  0%  {opacity:1;transform:translate(-50%,-50%) scale(.6);}
+  35% {opacity:1;transform:translate(-50%,-70%) scale(1.3);}
+  100%{opacity:0;transform:translate(-50%,-160%) scale(.4);}
+}
+/* Trailing sparks on move */
+.c-trail-spark{
+  position:fixed;pointer-events:none;z-index:99996;
+  width:3px;height:3px;border-radius:50%;
+  background:var(--elec);
+  box-shadow:0 0 5px var(--elec);
+  animation:trailFade .35s ease-out forwards;
+}
+@keyframes trailFade{
+  0%  {opacity:.8;transform:scale(1);}
+  100%{opacity:0;transform:scale(0);}
+}
+
+/* ══════════════ ROOT ══════════════ */
+:root{
+  --c0:#020a14;--elec:#00c8f0;--volt:#ffd700;--plasma:#7c3aed;
+  --green:#00e58a;--red:#ff3d5a;--orange:#ff8c00;
+  --text:#d4eaf8;--muted:rgba(212,234,248,.45);
+  --border:rgba(0,200,240,.18);--borderH:rgba(0,200,240,.5);
+  --card:rgba(4,16,32,.84);--r:14px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:'Inter',sans-serif;background:var(--c0);color:var(--text);overflow-x:hidden;min-height:100vh;}
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:var(--elec);border-radius:4px;}
+input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #071830 inset;-webkit-text-fill-color:#d4eaf8;}
+
+/* ══════════════ CANVAS ══════════════ */
+#bg{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+/* ══════════════ PAGES ══════════════ */
+.pg{display:none;min-height:100vh;position:relative;z-index:1;flex-direction:column;opacity:0;transform:translateY(20px);transition:opacity .45s,transform .45s;}
+.pg.on{display:flex;}
+.pg.vis{opacity:1;transform:none;}
+
+/* ══════════════ TOPBAR ══════════════ */
+.topbar{position:sticky;top:0;z-index:200;height:62px;display:flex;align-items:center;justify-content:space-between;padding:0 28px;background:rgba(2,10,20,.93);border-bottom:1px solid rgba(0,200,240,.13);backdrop-filter:blur(18px);}
+.tlogo{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--elec);letter-spacing:2px;display:flex;align-items:center;gap:8px;}
+.tlogo .bolt{animation:boltFlick 2s infinite;}
+@keyframes boltFlick{0%,100%{text-shadow:0 0 12px var(--volt);}55%{text-shadow:none;}}
+.tnav{display:flex;gap:4px;}
+.np{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:7px 14px;border-radius:100px;border:1px solid rgba(0,200,240,.18);color:rgba(212,234,248,.5);background:transparent;transition:all .2s;}
+.np:hover,.np.act{border-color:var(--elec);color:var(--elec);background:rgba(0,200,240,.08);}
+.uchip{display:flex;align-items:center;gap:9px;background:rgba(0,200,240,.07);border:1px solid rgba(0,200,240,.2);border-radius:100px;padding:5px 14px 5px 7px;transition:border-color .2s;}
+.uchip:hover{border-color:var(--elec);}
+.uav{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--elec),var(--plasma));display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:#020a14;flex-shrink:0;}
+.uname{font-size:12px;font-weight:600;color:#fff;max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.so-btn{background:none;border:none;color:var(--red);font-size:10px;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:1px;padding:6px 12px;border-radius:6px;transition:background .2s;}
+.so-btn:hover{background:rgba(255,61,90,.1);}
+
+/* ══════════════ BUTTONS ══════════════ */
+.btn-p{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px 36px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--elec),var(--plasma));color:#fff;transition:transform .15s,box-shadow .2s;}
+.btn-p:hover{transform:translateY(-2px);box-shadow:0 10px 36px rgba(0,200,240,.38);}
+.btn-s{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px 36px;border-radius:8px;border:1.5px solid rgba(0,200,240,.35);background:transparent;color:var(--elec);transition:all .2s;}
+.btn-s:hover{border-color:var(--elec);background:rgba(0,200,240,.07);transform:translateY(-2px);}
+.sbtn{width:100%;padding:14px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;border:none;border-radius:10px;background:linear-gradient(135deg,var(--elec),var(--plasma));color:#fff;transition:transform .15s,box-shadow .2s,opacity .2s;}
+.sbtn:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(0,200,240,.32);}
+.sbtn:disabled{opacity:.45;pointer-events:none;}
+
+/* ══════════════ FORMS ══════════════ */
+.field{margin-bottom:18px;}
+.field label{display:block;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:rgba(0,200,240,.8);margin-bottom:7px;}
+.field input,.field select{width:100%;padding:12px 15px;background:rgba(0,0,0,.4);border:1px solid rgba(0,200,240,.2);border-radius:9px;color:#e8f4ff;font-family:'Inter',sans-serif;font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s;}
+.field input:focus,.field select:focus{border-color:var(--elec);box-shadow:0 0 0 3px rgba(0,200,240,.1);}
+.field select option{background:#071830;}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.ferr{font-size:12px;color:var(--red);padding:9px 13px;background:rgba(255,61,90,.07);border:1px solid rgba(255,61,90,.18);border-radius:8px;display:none;}
+.ferr.on{display:block;}
+.loc-drop{position:absolute;top:100%;left:0;right:0;z-index:500;background:#071830;border:1px solid rgba(0,200,240,.28);border-radius:9px;max-height:200px;overflow-y:auto;margin-top:3px;box-shadow:0 8px 24px rgba(0,0,0,.5);}
+.loc-drop::-webkit-scrollbar{width:3px;}
+.loc-drop::-webkit-scrollbar-thumb{background:var(--elec);}
+.loc-item{padding:10px 14px;font-size:13px;color:var(--text);transition:background .15s;}
+.loc-item:hover{background:rgba(0,200,240,.1);color:var(--elec);}
+
+/* ══════════════ GLASS CARD ══════════════ */
+.glass{background:var(--card);border:1px solid var(--border);border-radius:var(--r);backdrop-filter:blur(18px);position:relative;overflow:hidden;}
+.glass::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--elec),transparent);}
+.ctitle{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#fff;letter-spacing:1px;margin-bottom:18px;display:flex;align-items:center;gap:8px;}
+.ctitle::before{content:'';width:3px;height:14px;background:var(--elec);border-radius:2px;flex-shrink:0;}
+
+/* ══════════════ PAGE 1 — LANDING ══════════════ */
+#p1{align-items:center;justify-content:center;text-align:center;padding:20px;background:radial-gradient(ellipse 100% 80% at 50% 30%,rgba(0,200,240,.055),transparent 70%);}
+.p1grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,240,.038) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,240,.038) 1px,transparent 1px);background-size:55px 55px;mask-image:radial-gradient(ellipse 90% 90% at 50% 50%,black,transparent);}
+.p1c{position:relative;z-index:2;max-width:920px;}
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,200,240,.07);border:1px solid rgba(0,200,240,.24);border-radius:100px;padding:6px 18px;margin-bottom:26px;font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--elec);}
+.bdot{width:7px;height:7px;border-radius:50%;background:var(--elec);animation:pdot 1.6s infinite;}
+@keyframes pdot{0%,100%{box-shadow:0 0 0 0 rgba(0,200,240,.7);}70%{box-shadow:0 0 0 10px rgba(0,200,240,0);}}
+.p1t{font-family:'Orbitron',monospace;font-weight:900;font-size:clamp(26px,5.2vw,70px);line-height:1.08;letter-spacing:-1px;margin-bottom:20px;}
+.p1t .l1{color:#fff;display:block;}
+.p1t .l2{display:block;background:linear-gradient(120deg,var(--elec) 0%,#a78bfa 38%,var(--volt) 76%,var(--elec) 100%);background-size:250%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:fg 6s linear infinite;}
+@keyframes fg{0%{background-position:0%}100%{background-position:250%}}
+.p1s{font-size:clamp(13px,1.7vw,17px);color:var(--muted);line-height:1.85;max-width:660px;margin:0 auto 38px;}
+.p1ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:52px;}
+.sbar{display:grid;grid-template-columns:repeat(5,1fr);background:rgba(4,16,32,.72);border:1px solid var(--border);border-radius:15px;overflow:hidden;backdrop-filter:blur(14px);}
+.si{padding:20px 10px;text-align:center;border-right:1px solid rgba(0,200,240,.08);}
+.si:last-child{border-right:none;}
+.sn{font-family:'Orbitron',monospace;font-size:clamp(16px,2.8vw,28px);font-weight:900;color:var(--elec);display:block;text-shadow:0 0 22px rgba(0,200,240,.45);}
+.sl{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;}
+.sdnarrow{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:7px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(0,200,240,.3);}
+.sdnarrow span{animation:ab 2s ease-in-out infinite;font-size:22px;color:rgba(0,200,240,.32);}
+@keyframes ab{0%,100%{transform:translateY(0);}50%{transform:translateY(9px);}}
+
+/* ══════════════ PAGE 2 — AUTH ══════════════ */
+#p2{align-items:center;justify-content:center;padding:20px;}
+.awrap{display:grid;grid-template-columns:1fr 1fr;max-width:980px;width:100%;border-radius:20px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);border:1px solid var(--border);}
+@media(max-width:680px){.awrap{grid-template-columns:1fr;}}
+.aleft{background:linear-gradient(140deg,#020e1e,#061426);padding:50px 38px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;}
+.aleft::before{content:'';position:absolute;top:-60px;left:-60px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(0,200,240,.07),transparent 70%);}
+.alc{position:relative;z-index:1;}
+.aicon{font-size:50px;margin-bottom:18px;filter:drop-shadow(0 0 16px var(--volt));}
+.atitle{font-family:'Orbitron',monospace;font-size:clamp(16px,2.2vw,24px);font-weight:700;color:#fff;line-height:1.3;margin-bottom:12px;}
+.adesc{font-size:13px;color:var(--muted);line-height:1.75;margin-bottom:24px;}
+.flist{display:flex;flex-direction:column;gap:9px;}
+.fi{display:flex;align-items:center;gap:11px;font-size:13px;color:rgba(212,234,248,.7);}
+.fck{width:22px;height:22px;border-radius:50%;flex-shrink:0;background:rgba(0,200,240,.1);border:1px solid rgba(0,200,240,.28);display:flex;align-items:center;justify-content:center;font-size:11px;}
+.aright{background:rgba(4,16,32,.96);padding:50px 38px;backdrop-filter:blur(20px);}
+.fh{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:#fff;margin-bottom:6px;}
+.fsub{font-size:13px;color:var(--muted);margin-bottom:28px;line-height:1.6;}
+
+/* ══════════════ PAGE 3 — OTP ══════════════ */
+#p3{align-items:center;justify-content:center;padding:20px;}
+.otpc{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:50px 42px;max-width:470px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);backdrop-filter:blur(20px);position:relative;overflow:hidden;text-align:center;}
+.otpc::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--elec),var(--plasma),transparent);}
+.otp-sh{width:78px;height:78px;border-radius:50%;margin:0 auto 22px;background:linear-gradient(135deg,rgba(0,200,240,.11),rgba(124,58,237,.11));border:2px solid rgba(0,200,240,.28);display:flex;align-items:center;justify-content:center;font-size:34px;animation:shp 2.5s ease-in-out infinite;}
+@keyframes shp{0%,100%{box-shadow:0 0 0 0 rgba(0,200,240,.28);}50%{box-shadow:0 0 0 14px rgba(0,200,240,0);}}
+.ot-title{font-family:'Orbitron',monospace;font-size:19px;font-weight:700;color:#fff;margin-bottom:9px;}
+.ot-desc{font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:28px;}
+.ote{color:var(--elec);font-weight:600;}
+.orow{display:flex;gap:9px;justify-content:center;margin-bottom:22px;}
+.od{width:50px;height:56px;border-radius:9px;border:1.5px solid rgba(0,200,240,.22);background:rgba(0,0,0,.5);color:#fff;font-family:'Orbitron',monospace;font-size:21px;font-weight:700;text-align:center;outline:none;transition:border-color .2s,box-shadow .2s;}
+.od:focus{border-color:var(--elec);box-shadow:0 0 0 3px rgba(0,200,240,.14);}
+.od.ok{border-color:rgba(0,200,240,.5);background:rgba(0,200,240,.05);}
+.otimer{font-family:'Orbitron',monospace;font-size:12px;color:var(--muted);margin-bottom:18px;}
+#timer{color:var(--volt);}
+.resend{background:none;border:none;color:var(--elec);font-size:12px;text-decoration:underline;}
+.resend:disabled{opacity:.38;pointer-events:none;}
+.vbtn{width:100%;padding:14px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;border:none;border-radius:10px;background:linear-gradient(135deg,var(--green),#00a86b);color:#020a14;transition:transform .15s,box-shadow .2s;}
+.vbtn:hover{transform:translateY(-2px);box-shadow:0 10px 32px rgba(0,229,138,.28);}
+.oerr{color:var(--red);font-size:12px;margin-top:9px;min-height:18px;}
+.bkl{font-size:12px;color:var(--muted);margin-top:16px;}
+.bkl span{color:var(--elec);text-decoration:underline;}
+
+/* ══════════════ PAGE 4 — INTRO ══════════════ */
+#p4{flex-direction:column;}
+.p4hero{min-height:calc(100vh - 62px);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(0,200,240,.045),transparent 70%);text-align:center;}
+.p4ic{font-size:76px;margin-bottom:18px;filter:drop-shadow(0 0 22px rgba(0,200,240,.55));animation:fl 4s ease-in-out infinite;}
+@keyframes fl{0%,100%{transform:translateY(0);}50%{transform:translateY(-11px);}}
+.stag{font-family:'Orbitron',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--elec);display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:10px;}
+.stag::before,.stag::after{content:'';width:20px;height:1px;background:var(--elec);}
+.p4t{font-family:'Orbitron',monospace;font-size:clamp(20px,4vw,50px);font-weight:900;color:#fff;line-height:1.15;margin-bottom:14px;}
+.p4s{font-size:clamp(13px,1.6vw,16px);color:var(--muted);line-height:1.85;max-width:600px;margin:0 auto 38px;}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(218px,1fr));gap:15px;max-width:900px;width:100%;margin:0 auto 38px;}
+.tc{background:rgba(4,16,32,.7);border:1px solid var(--border);border-radius:13px;padding:22px 19px;text-align:left;transition:all .3s;position:relative;overflow:hidden;backdrop-filter:blur(10px);}
+.tc::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--elec),transparent);transform:scaleX(0);transition:transform .4s;}
+.tc:hover{border-color:var(--borderH);transform:translateY(-5px);}
+.tc:hover::after{transform:scaleX(1);}
+.tcn{font-family:'Orbitron',monospace;font-size:30px;font-weight:900;color:rgba(0,200,240,.065);position:absolute;top:10px;right:12px;}
+.tci{font-size:26px;margin-bottom:10px;}
+.tct{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#fff;margin-bottom:6px;letter-spacing:.5px;}
+.tcd{font-size:12px;color:var(--muted);line-height:1.65;}
+
+/* ══════════════ PAGE 5 — PREDICTION ══════════════ */
+#p5{flex-direction:column;}
+.p5body{padding:28px 22px;max-width:1100px;margin:0 auto;width:100%;}
+.p5grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start;}
+@media(max-width:960px){.p5grid{grid-template-columns:1fr;}}
+
+/* ── APPLIANCE SECTION ── */
+.appl-section{margin-top:18px;}
+.appl-block{background:rgba(0,0,0,.25);border:1px solid rgba(0,200,240,.12);border-radius:12px;margin-bottom:12px;overflow:hidden;transition:border-color .2s;}
+.appl-block:hover{border-color:rgba(0,200,240,.3);}
+.appl-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;cursor:pointer;user-select:none;gap:12px;}
+.appl-head-left{display:flex;align-items:center;gap:10px;}
+.appl-icon{font-size:20px;flex-shrink:0;}
+.appl-name{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#fff;letter-spacing:.5px;}
+.appl-kwh-badge{font-size:10px;padding:3px 9px;border-radius:20px;background:rgba(0,200,240,.1);border:1px solid rgba(0,200,240,.2);color:var(--elec);font-family:'Orbitron',monospace;white-space:nowrap;}
+.appl-toggle{width:20px;height:20px;border-radius:50%;border:1.5px solid rgba(0,200,240,.3);display:flex;align-items:center;justify-content:center;font-size:10px;transition:all .2s;flex-shrink:0;color:var(--elec);}
+.appl-block.open .appl-toggle{background:rgba(0,200,240,.15);border-color:var(--elec);}
+.appl-body{display:none;padding:0 18px 16px;}
+.appl-block.open .appl-body{display:block;}
+.appl-frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;}
+.appl-frow-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:8px;}
+.appl-field label{display:block;font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,200,240,.7);margin-bottom:5px;}
+.appl-field input,.appl-field select{width:100%;padding:9px 12px;background:rgba(0,0,0,.4);border:1px solid rgba(0,200,240,.18);border-radius:8px;color:#e8f4ff;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color .2s;}
+.appl-field input:focus,.appl-field select:focus{border-color:var(--elec);}
+.appl-field select option{background:#071830;}
+.appl-note{font-size:11px;color:var(--muted);margin-top:6px;padding:7px 10px;background:rgba(0,200,240,.03);border-radius:6px;border-left:2px solid rgba(0,200,240,.25);}
+.appl-total-row{display:flex;justify-content:space-between;align-items:center;padding:10px 18px;background:rgba(0,200,240,.05);border-top:1px solid rgba(0,200,240,.1);font-size:12px;}
+.atl{color:var(--muted);}
+.atv{font-family:'Orbitron',monospace;font-size:12px;color:var(--elec);font-weight:700;}
+.appliance-summary{background:rgba(0,0,0,.3);border:1px solid rgba(0,200,240,.15);border-radius:10px;padding:14px 16px;margin-top:4px;display:none;}
+.appliance-summary.on{display:block;}
+.as-title{font-family:'Orbitron',monospace;font-size:10px;color:var(--volt);margin-bottom:10px;letter-spacing:1px;}
+.as-row{display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.as-row:last-child{border-bottom:none;font-weight:600;}
+.as-lbl{color:var(--muted);}
+.as-val{font-family:'Orbitron',monospace;font-size:11px;color:#fff;}
+.fcard{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:26px 24px;position:sticky;top:74px;backdrop-filter:blur(16px);}
+.fcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--elec),transparent);}
+.gauges{display:flex;flex-direction:column;gap:8px;margin:14px 0;}
+.gi{display:flex;flex-direction:column;gap:4px;}
+.gl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);}
+.gv{color:var(--elec);font-weight:600;}
+.gtr{height:5px;background:rgba(255,255,255,.07);border-radius:4px;overflow:hidden;}
+.gf{height:100%;border-radius:4px;transition:width .65s cubic-bezier(.4,0,.2,1);}
+
+/* Result */
+.rcard{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:26px 24px;backdrop-filter:blur(16px);position:relative;overflow:hidden;}
+.rcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--plasma),transparent);}
+.rscreen{background:rgba(0,0,0,.5);border-radius:11px;border:1px solid rgba(0,200,240,.1);padding:28px 18px;text-align:center;margin-bottom:16px;position:relative;overflow:hidden;}
+.rscreen::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 60% at 50% 50%,rgba(0,200,240,.035),transparent);}
+.rval{font-family:'Orbitron',monospace;font-size:clamp(36px,6vw,58px);font-weight:900;color:var(--elec);display:block;position:relative;text-shadow:0 0 36px rgba(0,200,240,.55);line-height:1;}
+.runit{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-top:7px;display:block;}
+.schip{display:flex;align-items:center;gap:12px;padding:13px 17px;border-radius:10px;margin-bottom:14px;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.055);}
+.sdot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.sdot.low{background:var(--green);box-shadow:0 0 10px var(--green);}
+.sdot.norm{background:var(--elec);box-shadow:0 0 10px var(--elec);}
+.sdot.high{background:var(--volt);box-shadow:0 0 10px var(--volt);}
+.sdot.crit{background:var(--red);box-shadow:0 0 10px var(--red);animation:bl .5s infinite;}
+@keyframes bl{50%{opacity:.1}}
+.stitle{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:#fff;}
+.ssub{font-size:11px;color:var(--muted);margin-top:2px;}
+
+/* Multi-day boxes */
+.mday-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:14px 0;}
+.mday-box{background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px 12px;text-align:center;transition:border-color .2s;}
+.mday-box:hover{border-color:rgba(0,200,240,.3);}
+.mdlbl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.mdkwh{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--elec);}
+.mdprice{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:var(--green);margin-top:3px;}
+
+/* Custom days */
+.daysrow{display:flex;gap:10px;align-items:flex-end;margin-bottom:14px;}
+.daysrow .field{margin-bottom:0;flex:1;}
+.daysrow button{padding:12px 16px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--elec),var(--plasma));color:#fff;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:1px;white-space:nowrap;transition:box-shadow .2s;}
+.daysrow button:hover{box-shadow:0 6px 20px rgba(0,200,240,.35);}
+.dres{background:rgba(0,0,0,.3);border:1px solid rgba(0,200,240,.15);border-radius:10px;padding:14px 16px;margin-bottom:14px;display:none;}
+.dres.on{display:block;}
+.drrow{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;}
+.drlbl{color:var(--muted);}
+.drval{font-family:'Orbitron',monospace;color:var(--elec);font-size:12px;}
+
+/* Breakdown rows */
+.brows{display:flex;flex-direction:column;gap:6px;margin-top:12px;}
+.br{display:flex;justify-content:space-between;align-items:center;padding:7px 11px;background:rgba(255,255,255,.023);border-radius:7px;font-size:12px;}
+.br.act{background:rgba(255,215,0,.05);border:1px solid rgba(255,215,0,.13);}
+.brlbl{color:var(--muted);}
+.brval{font-family:'Orbitron',monospace;font-size:11px;color:#fff;font-weight:600;}
+
+/* Charts */
+.charts{margin-top:20px;display:flex;flex-direction:column;gap:18px;}
+.chcard{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:22px;backdrop-filter:blur(14px);}
+.chcard canvas{max-height:210px;}
+
+/* ══════════════ BILL RECEIPT ══════════════ */
+.bill-receipt{background:rgba(4,16,32,.9);border:1px solid rgba(0,200,240,.25);border-radius:16px;padding:28px 26px;margin-top:20px;backdrop-filter:blur(16px);position:relative;overflow:hidden;}
+.bill-receipt::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,var(--volt),var(--elec),transparent);}
+.bill-header{text-align:center;border-bottom:1px dashed rgba(0,200,240,.2);padding-bottom:16px;margin-bottom:16px;}
+.bill-org{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;color:var(--elec);letter-spacing:2px;margin-bottom:4px;}
+.bill-subtitle{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;}
+.bill-notice{font-size:12px;color:var(--volt);margin-top:6px;font-style:italic;}
+.bill-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px;}
+.bill-meta-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;}
+.bml{color:var(--muted);}
+.bmv{color:var(--text);font-weight:500;}
+.bill-section-title{font-size:10px;letter-spacing:2px;text-transform:uppercase;color:rgba(0,200,240,.6);border-bottom:1px solid rgba(0,200,240,.12);padding-bottom:6px;margin-bottom:10px;font-family:'Orbitron',monospace;}
+.bill-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px;}
+.bill-row:last-child{border-bottom:none;}
+.bill-row-label{color:var(--muted);}
+.bill-row-val{font-family:'Orbitron',monospace;font-size:12px;color:var(--text);}
+.bill-row-val.credit{color:var(--green);}
+.bill-row-val.charge{color:var(--text);}
+.bill-total-box{background:rgba(0,200,240,.07);border:1px solid rgba(0,200,240,.25);border-radius:10px;padding:16px;margin-top:14px;display:flex;justify-content:space-between;align-items:center;}
+.btl{font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,200,240,.7);font-family:'Orbitron',monospace;}
+.btv{font-family:'Orbitron',monospace;font-size:24px;font-weight:900;color:var(--elec);}
+.bill-footer{text-align:center;margin-top:14px;font-size:11px;color:var(--muted);border-top:1px dashed rgba(0,200,240,.15);padding-top:12px;line-height:1.6;}
+.bill-duedate{font-family:'Orbitron',monospace;font-size:12px;color:var(--volt);margin-top:6px;}
+
+/* ══════════════ PAGE 6 — TEAM ══════════════ */
+#p6{flex-direction:column;}
+.p6body{padding:50px 24px;max-width:1000px;margin:0 auto;width:100%;}
+.p6head{text-align:center;margin-bottom:48px;}
+.p6t{font-family:'Orbitron',monospace;font-size:clamp(22px,4vw,40px);font-weight:900;color:#fff;margin-bottom:12px;}
+.p6s{font-size:14px;color:var(--muted);line-height:1.75;max-width:640px;margin:0 auto;}
+.team-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:20px;margin-bottom:44px;}
+.tcard{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:32px 20px 24px;text-align:center;transition:all .35s;backdrop-filter:blur(14px);position:relative;overflow:hidden;}
+.tcard:hover{border-color:var(--borderH);transform:translateY(-8px);box-shadow:0 20px 44px rgba(0,0,0,.55);}
+.tcard.guide{border-color:rgba(0,200,240,.32);background:rgba(0,200,240,.03);}
+.tcard-lead{border-color:rgba(255,215,0,.28);background:rgba(255,215,0,.025);}
+.tcard-lead:hover{border-color:var(--volt);}
+.tcard-glow{position:absolute;top:-30px;left:50%;transform:translateX(-50%);width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,rgba(0,200,240,.12),transparent 70%);pointer-events:none;}
+.glow-be{background:radial-gradient(circle,rgba(0,229,138,.1),transparent 70%);}
+.glow-fe{background:radial-gradient(circle,rgba(124,58,237,.1),transparent 70%);}
+.glow-de{background:radial-gradient(circle,rgba(255,140,0,.1),transparent 70%);}
+.glow-guide{background:radial-gradient(circle,rgba(0,200,240,.14),transparent 70%);}
+.tav-wrap{position:relative;width:78px;margin:0 auto 18px;}
+.tav{width:72px;height:72px;border-radius:50%;border:2px solid rgba(0,200,240,.3);display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(0,200,240,.1),rgba(124,58,237,.1));font-family:'Orbitron',monospace;font-size:17px;font-weight:700;color:var(--elec);transition:all .3s;position:relative;z-index:1;}
+.tav-be{border-color:rgba(0,229,138,.3);color:var(--green);background:linear-gradient(135deg,rgba(0,229,138,.1),rgba(0,200,240,.08));}
+.tav-fe{border-color:rgba(124,58,237,.3);color:#a78bfa;background:linear-gradient(135deg,rgba(124,58,237,.1),rgba(0,200,240,.08));}
+.tav-de{border-color:rgba(255,140,0,.3);color:var(--orange);background:linear-gradient(135deg,rgba(255,140,0,.1),rgba(255,61,90,.06));}
+.tav-guide{border-color:var(--elec);color:var(--elec);width:82px;height:82px;font-size:19px;box-shadow:0 0 22px rgba(0,200,240,.25);}
+.tav-ring{position:absolute;inset:-6px;border-radius:50%;border:1px dashed rgba(0,200,240,.2);animation:spinRing 8s linear infinite;}
+@keyframes spinRing{to{transform:rotate(360deg);}}
+.tcard:hover .tav{box-shadow:0 0 18px rgba(0,200,240,.3);border-color:var(--elec);}
+.tcard-lead .tav{border-color:rgba(255,215,0,.4);color:var(--volt);background:linear-gradient(135deg,rgba(255,215,0,.12),rgba(255,140,0,.08));}
+.tcard-lead:hover .tav{box-shadow:0 0 18px rgba(255,215,0,.3);border-color:var(--volt);}
+.tname{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#fff;margin-bottom:5px;letter-spacing:.5px;}
+.tid{font-size:11px;color:rgba(0,200,240,.5);letter-spacing:1px;margin-bottom:8px;}
+.trole-tag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.8px;padding:5px 12px;border-radius:20px;text-transform:uppercase;margin-bottom:6px;}
+.ml-tag{background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.25);color:var(--volt);}
+.be-tag{background:rgba(0,229,138,.1);border:1px solid rgba(0,229,138,.25);color:var(--green);}
+.fe-tag{background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.25);color:#a78bfa;}
+.de-tag{background:rgba(255,140,0,.1);border:1px solid rgba(255,140,0,.25);color:var(--orange);}
+.guide-tag{background:rgba(0,200,240,.1);border:1px solid rgba(0,200,240,.28);color:var(--elec);}
+.tlbadge{display:inline-block;margin-top:6px;background:rgba(255,215,0,.1);border:1px solid rgba(255,215,0,.25);color:var(--volt);font-size:10px;letter-spacing:1px;padding:4px 10px;border-radius:20px;text-transform:uppercase;}
+.gbadge{display:inline-block;margin-top:6px;background:rgba(0,200,240,.1);border:1px solid rgba(0,200,240,.25);color:var(--elec);font-size:10px;letter-spacing:1px;padding:4px 10px;border-radius:20px;text-transform:uppercase;}
+.team-hero-banner{position:relative;border-radius:20px;overflow:hidden;border:1px solid rgba(0,200,240,.2);margin-bottom:44px;background:linear-gradient(135deg,rgba(4,16,32,.95),rgba(7,24,48,.95));}
+.thb-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,200,240,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,240,.04) 1px,transparent 1px);background-size:40px 40px;}
+.thb-content{position:relative;z-index:1;padding:48px 40px;text-align:center;}
+.thb-dept{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(0,200,240,.6);margin-bottom:16px;font-family:'Orbitron',monospace;}
+.thb-title{font-family:'Orbitron',monospace;font-size:clamp(32px,5vw,64px);font-weight:900;color:#fff;line-height:1.1;margin-bottom:14px;letter-spacing:-1px;}
+.thb-accent{background:linear-gradient(120deg,var(--elec),var(--plasma),var(--volt));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.thb-proj{font-size:clamp(13px,1.6vw,16px);color:var(--muted);max-width:640px;margin:0 auto 22px;line-height:1.7;}
+.thb-meta{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+.thb-pill{padding:6px 16px;border-radius:20px;border:1px solid rgba(0,200,240,.2);background:rgba(0,200,240,.07);font-size:11px;color:var(--elec);letter-spacing:1px;font-family:'Orbitron',monospace;}
+.abstract-box{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:32px 28px;backdrop-filter:blur(14px);}
+.abs-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--elec);margin-bottom:16px;letter-spacing:1px;}
+.abs-text{font-size:13px;color:var(--muted);line-height:1.85;}
+.kw-wrap{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
+.kw{padding:6px 15px;border-radius:20px;border:1px solid rgba(0,200,240,.2);background:rgba(0,200,240,.05);font-size:12px;color:rgba(212,234,248,.7);transition:all .2s;}
+.kw:hover{border-color:var(--elec);color:var(--elec);}
+
+/* ══════════════ PAGE 7 — DASHBOARD ══════════════ */
+#p7{flex-direction:column;}
+.dbody{padding:26px 22px;max-width:1100px;margin:0 auto;width:100%;}
+.dt{font-family:'Orbitron',monospace;font-size:clamp(15px,2.4vw,23px);font-weight:700;color:#fff;margin-bottom:5px;}
+.ds{font-size:13px;color:var(--muted);}
+.kpirow{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:22px;}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px 16px;backdrop-filter:blur(12px);transition:border-color .2s;}
+.kpi:hover{border-color:var(--borderH);}
+.kl{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.kv{font-family:'Orbitron',monospace;font-size:clamp(18px,2.8vw,28px);font-weight:900;color:var(--elec);}
+.ks{font-size:11px;color:var(--muted);margin-top:3px;}
+.dgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+@media(max-width:680px){.dgrid{grid-template-columns:1fr;}}
+.dc{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px;backdrop-filter:blur(12px);}
+.dc.full{grid-column:1/-1;}
+.dc canvas{max-height:210px;}
+.month-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;}
+.mf-btn{font-size:11px;padding:6px 14px;border-radius:20px;border:1px solid rgba(0,200,240,.2);background:transparent;color:rgba(212,234,248,.5);font-family:'Orbitron',monospace;letter-spacing:.5px;transition:all .2s;}
+.mf-btn:hover,.mf-btn.act{border-color:var(--elec);color:var(--elec);background:rgba(0,200,240,.07);}
+.hist-table{width:100%;border-collapse:collapse;font-size:12px;}
+.hist-table th{text-align:left;padding:9px 11px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,200,240,.6);border-bottom:1px solid rgba(0,200,240,.1);font-weight:600;}
+.hist-table td{padding:9px 11px;border-bottom:1px solid rgba(255,255,255,.04);color:rgba(212,234,248,.7);}
+.hist-table tr:hover td{background:rgba(0,200,240,.025);}
+.stag2{display:inline-block;padding:3px 9px;border-radius:100px;font-size:10px;font-weight:600;}
+.st-low{background:rgba(0,229,138,.1);color:var(--green);}
+.st-norm{background:rgba(0,200,240,.1);color:var(--elec);}
+.st-high{background:rgba(255,215,0,.1);color:var(--volt);}
+.st-crit{background:rgba(255,61,90,.1);color:var(--red);}
+
+/* ══════════════ TOAST ══════════════ */
+#toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(18px);background:rgba(2,10,20,.97);border:1px solid var(--border);border-radius:10px;padding:11px 22px;font-family:'Orbitron',monospace;font-size:11px;letter-spacing:1px;color:var(--elec);z-index:9999;opacity:0;transition:all .3s;pointer-events:none;backdrop-filter:blur(14px);white-space:nowrap;max-width:90vw;}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ══════════════ OTP ANIMATIONS ══════════════ */
+@keyframes oaIcon{0%{transform:scale(0) rotate(-20deg);}100%{transform:scale(1) rotate(0deg);}}
+
+/* ══════════════ SIGN OUT ANIMATION ══════════════ */
+#signout-overlay{
+  position:fixed;inset:0;z-index:9995;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(2,10,20,0);
+  transition:background .3s;
+  pointer-events:none;
+}
+#signout-overlay.on{display:flex;pointer-events:all;}
+#signout-content{
+  position:relative;z-index:2;text-align:center;
+  opacity:0;transform:scale(.7) translateY(30px);
+  transition:opacity .4s,transform .4s;
+}
+#signout-overlay.on #signout-content{opacity:1;transform:scale(1) translateY(0);}
+#signout-bolt-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+@keyframes soFadeOut{
+  0%  {opacity:1;transform:scale(1);}
+  60% {opacity:1;transform:scale(1.05);}
+  100%{opacity:0;transform:scale(1.15);}
+}
+@keyframes soSlideAway{
+  0%  {opacity:1;transform:translateY(0) scale(1);}
+  100%{opacity:0;transform:translateY(-40px) scale(.9);}
+}
+@keyframes otpShake{
+  0%,100%{transform:translateX(0);}
+  12%{transform:translateX(-12px);}
+  25%{transform:translateX(10px);}
+  37%{transform:translateX(-8px);}
+  50%{transform:translateX(7px);}
+  62%{transform:translateX(-5px);}
+  75%{transform:translateX(4px);}
+  87%{transform:translateX(-2px);}
+}
+@keyframes thunderFlash{0%,100%{opacity:0;}15%,35%{opacity:1;}25%,45%{opacity:0;}}
+.otp-sent-pulse{animation:otpPulse 1.2s ease-out 3;}
+@keyframes otpPulse{0%{box-shadow:0 0 0 0 rgba(0,200,240,.7);}70%{box-shadow:0 0 0 20px rgba(0,200,240,0);}100%{box-shadow:0 0 0 0 rgba(0,200,240,0);}}
+.otp-verified-glow{animation:verGlow .8s ease-out;}
+@keyframes verGlow{0%{box-shadow:0 0 0 0 rgba(0,229,138,.8);}100%{box-shadow:0 0 60px 0 rgba(0,229,138,0);}}
+.otp-fail-shake{animation:failShake .4s ease-out;}
+@keyframes failShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-10px);}40%{transform:translateX(10px);}60%{transform:translateX(-6px);}80%{transform:translateX(6px);}}
+
+/* ══════════════ PDF DOWNLOAD BUTTON ══════════════ */
+.pdf-dl-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;margin-top:14px;padding:14px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border:none;border-radius:10px;background:linear-gradient(135deg,var(--green),#00a86b);color:#020a14;cursor:none;transition:transform .15s,box-shadow .2s;}
+.pdf-dl-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,229,138,.35);}
+#loading{position:fixed;inset:0;z-index:9997;background:rgba(2,10,20,.85);backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
+#loading.on{display:flex;}
+.spin{width:46px;height:46px;border-radius:50%;border:3px solid rgba(0,200,240,.14);border-top-color:var(--elec);animation:sp .8s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ltext{font-family:'Orbitron',monospace;font-size:11px;letter-spacing:2px;color:var(--elec);}
+#flash{position:fixed;inset:0;z-index:9998;background:rgba(200,230,255,.055);pointer-events:none;opacity:0;transition:opacity .1s;}
+@media(max-width:500px){.sbar{grid-template-columns:repeat(3,1fr);}.tnav{display:none;}.frow{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div id="flash"></div>
+<div id="c-bolt"><svg viewBox="0 0 22 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="14,0 3,18 10,18 8,34 20,13 13,13 18,0" fill="#00c8f0" stroke="rgba(255,255,255,.3)" stroke-width=".5"/>
+  <polygon points="14,0 3,18 10,18 8,34 20,13 13,13 18,0" fill="url(#bg)" opacity=".5"/>
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff" stop-opacity=".7"/><stop offset="100%" stop-color="#00c8f0" stop-opacity="0"/></linearGradient></defs>
+</svg></div>
+<div id="c-halo"></div>
+<div id="loading"><div class="spin"></div><div class="ltext" id="ltxt">SENDING OTP...</div></div>
+<div id="toast"></div>
+
+<!-- OTP SENT ANIMATION OVERLAY -->
+<div id="otp-anim-overlay" style="position:fixed;inset:0;z-index:9990;display:none;align-items:center;justify-content:center;flex-direction:column;gap:0;background:rgba(2,10,20,.96);backdrop-filter:blur(16px);">
+  <!-- Thunder canvas -->
+  <canvas id="thunder-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
+  <div id="otp-anim-content" style="position:relative;z-index:2;text-align:center;max-width:400px;padding:20px;">
+    <div id="otp-anim-icon" style="font-size:80px;margin-bottom:16px;animation:oaIcon .5s cubic-bezier(.68,-0.55,.27,1.55);"></div>
+    <div id="otp-anim-title" style="font-family:'Orbitron',monospace;font-size:clamp(18px,4vw,26px);font-weight:900;color:#fff;margin-bottom:10px;letter-spacing:1px;"></div>
+    <div id="otp-anim-sub" style="font-size:14px;color:rgba(212,234,248,.65);line-height:1.65;margin-bottom:22px;"></div>
+    <div id="otp-anim-email" style="font-family:'Orbitron',monospace;font-size:12px;padding:8px 20px;border-radius:20px;background:rgba(0,200,240,.08);border:1px solid rgba(0,200,240,.22);color:var(--elec);display:inline-block;margin-bottom:20px;"></div>
+    <button id="otp-anim-btn" style="padding:13px 32px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;border-radius:10px;cursor:none;transition:transform .15s,box-shadow .2s;" onclick="closeOTPAnim()"></button>
+  </div>
+</div>
+@keyframes oaIcon{0%{transform:scale(0) rotate(-20deg);}100%{transform:scale(1) rotate(0deg);}}
+
+/* ══════════════ SIGN OUT ANIMATION ══════════════ */
+#signout-overlay{
+  position:fixed;inset:0;z-index:9995;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(2,10,20,0);
+  transition:background .3s;
+  pointer-events:none;
+}
+#signout-overlay.on{display:flex;pointer-events:all;}
+#signout-content{
+  position:relative;z-index:2;text-align:center;
+  opacity:0;transform:scale(.7) translateY(30px);
+  transition:opacity .4s,transform .4s;
+}
+#signout-overlay.on #signout-content{opacity:1;transform:scale(1) translateY(0);}
+#signout-bolt-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+@keyframes soFadeOut{
+  0%  {opacity:1;transform:scale(1);}
+  60% {opacity:1;transform:scale(1.05);}
+  100%{opacity:0;transform:scale(1.15);}
+}
+@keyframes soSlideAway{
+  0%  {opacity:1;transform:translateY(0) scale(1);}
+  100%{opacity:0;transform:translateY(-40px) scale(.9);}
+}
+@keyframes otpShake{
+  0%,100%{transform:translateX(0);}
+  12%{transform:translateX(-12px);}
+  25%{transform:translateX(10px);}
+  37%{transform:translateX(-8px);}
+  50%{transform:translateX(7px);}
+  62%{transform:translateX(-5px);}
+  75%{transform:translateX(4px);}
+  87%{transform:translateX(-2px);}
+}
+
+<!-- SIGN OUT ANIMATED OVERLAY -->
+<div id="signout-overlay" style="position:fixed;inset:0;z-index:9995;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,10,20,0);transition:background .3s;">
+  <canvas id="signout-bolt-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
+  <div id="signout-content" style="position:relative;z-index:2;text-align:center;opacity:0;transform:scale(.75) translateY(28px);transition:opacity .4s .1s,transform .4s .1s;">
+    <div style="font-size:78px;margin-bottom:14px;filter:drop-shadow(0 0 32px var(--elec));">⚡</div>
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(22px,4vw,36px);font-weight:900;color:#fff;letter-spacing:3px;margin-bottom:12px;text-shadow:0 0 28px rgba(0,200,240,.8);">SIGNING OUT</div>
+    <div style="font-size:15px;color:rgba(212,234,248,.7);margin-bottom:28px;line-height:1.7;">Goodbye, <span id="so-name" style="color:var(--elec);font-weight:700;font-size:16px;"></span>!<br>Your session has been safely cleared.</div>
+    <div style="display:flex;gap:10px;justify-content:center;align-items:center;">
+      <div style="width:10px;height:10px;border-radius:50%;background:var(--elec);animation:dPulse .6s ease-in-out infinite;"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:var(--elec);animation:dPulse .6s ease-in-out .22s infinite;"></div>
+      <div style="width:10px;height:10px;border-radius:50%;background:var(--elec);animation:dPulse .6s ease-in-out .44s infinite;"></div>
+    </div>
+  </div>
+</div>
+<style>
+#signout-overlay.on{display:flex!important;}
+#signout-overlay.on #signout-content{opacity:1!important;transform:scale(1) translateY(0)!important;}
+@keyframes dPulse{0%,100%{opacity:.22;transform:scale(.65);}50%{opacity:1;transform:scale(1.35);}}
+</style>
+
+<!-- PAGE 1 — LANDING -->
+<div class="pg on vis" id="p1">
+  <div class="p1grid"></div>
+  <div class="p1c">
+    <div class="badge"><span class="bdot"></span> Final Year Project · AI & ML · 2025</div>
+    <h1 class="p1t">
+      <span class="l1">AI-Driven Transformation in</span>
+      <span class="l2">Electricity Consumption</span>
+      <span class="l1" style="font-size:clamp(16px,2.8vw,38px);opacity:.78;margin-top:6px;">& Energy Management</span>
+    </h1>
+    <p class="p1s">An intelligent system powered by linear regression trained on <strong style="color:var(--elec);">1,500 real data points</strong> — forecasting monthly electricity demand from climate parameters with <strong style="color:var(--green);">94% accuracy (R²=0.94)</strong>, complete with real APCPDCL tariff billing and smart alerts.</p>
+    <div class="p1ctas">
+      <button class="btn-p" onclick="showPage('p2')">⚡ Login to System</button>
+      <button class="btn-s" onclick="showPage('p6')">👥 Meet the Team</button>
+    </div>
+    <div class="sbar">
+      <div class="si"><span class="sn" data-to="94" data-sx="%">0%</span><div class="sl">Model R²</div></div>
+      <div class="si"><span class="sn" data-to="1500" data-sx="">0</span><div class="sl">Dataset Rows</div></div>
+      <div class="si"><span class="sn" data-to="5" data-sx="">0</span><div class="sl">ML Models</div></div>
+      <div class="si"><span class="sn" data-to="6" data-sx="">0</span><div class="sl">Tariff Slabs</div></div>
+      <div class="si"><span class="sn" data-to="4" data-sx="">0</span><div class="sl">Team Members</div></div>
+    </div>
+  </div>
+  <div class="sdnarrow"><span>Begin</span><span>▼</span></div>
+</div>
+
+<!-- PAGE 2 — USER DETAILS -->
+<div class="pg" id="p2">
+  <div class="awrap">
+    <div class="aleft">
+      <div class="alc">
+        <div class="aicon">⚡</div>
+        <div class="atitle">Energy Intelligence<br>Platform</div>
+        <div class="adesc">Enter your details to receive a secure one-time password. Your identity is verified before accessing the AI prediction engine.</div>
+        <div class="flist">
+          <div class="fi"><div class="fck">✓</div>Regression model on 1,500 real rows</div>
+          <div class="fi"><div class="fck">✓</div>Real-time OTP via email</div>
+          <div class="fi"><div class="fck">✓</div>Real APCPDCL tariff billing</div>
+          <div class="fi"><div class="fck">✓</div>Daily · Weekly · Monthly bill forecast</div>
+          <div class="fi"><div class="fck">✓</div>Full prediction history & dashboard</div>
+        </div>
+      </div>
+    </div>
+    <div class="aright">
+      <div class="fh">Create Your Session</div>
+      <div class="fsub">Fill in your details. An OTP will be sent to your email.</div>
+      <div class="field"><label>Full Name</label><input type="text" id="inp-name" placeholder="e.g. N. Vignesh" autocomplete="off"></div>
+      <div class="field"><label>Gender</label><select id="inp-gender"><option value="">Select Gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option></select></div>
+      <div class="field"><label>Email Address</label><input type="email" id="inp-email" placeholder="you@gmail.com" autocomplete="off"></div>
+      <!-- State / District / Region -->
+      <div class="field" style="position:relative;">
+        <label>State</label>
+        <input type="text" id="inp-state" placeholder="Type to search state..." autocomplete="off" oninput="filterStates(this.value)" onfocus="openDrop('state-drop')" onblur="closeDrop('state-drop',300)">
+        <div id="state-drop" class="loc-drop" style="display:none;"></div>
+      </div>
+      <div class="frow">
+        <div class="field" style="position:relative;">
+          <label>District</label>
+          <input type="text" id="inp-district" placeholder="Type district..." autocomplete="off" oninput="filterDistricts(this.value)" onfocus="openDrop('dist-drop')" onblur="closeDrop('dist-drop',300)">
+          <div id="dist-drop" class="loc-drop" style="display:none;"></div>
+        </div>
+        <div class="field" style="position:relative;">
+          <label>Region / Village</label>
+          <input type="text" id="inp-region" placeholder="Town or village..." autocomplete="off">
+        </div>
+      </div>
+      <div class="ferr" id="ferr"></div>
+      <button class="sbtn" id="sotp-btn" onclick="sendOTP()">📨 SEND OTP TO EMAIL</button>
+      <p style="font-size:12px;color:var(--muted);margin-top:13px;text-align:center;"><span style="color:var(--elec);" onclick="showPage('p1')">← Back to Home</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 3 — OTP -->
+<div class="pg" id="p3">
+  <div class="otpc">
+    <div class="otp-sh">🔐</div>
+    <div class="ot-title">Verify Your Identity</div>
+    <div class="ot-desc">6-digit code sent to<br><span class="ote" id="otp-email-lbl">your email</span></div>
+    <div class="orow">
+      <input class="od" id="d1" maxlength="1" type="text" inputmode="numeric" oninput="odig(this,'d2')" onkeydown="obk(event,this,'')">
+      <input class="od" id="d2" maxlength="1" type="text" inputmode="numeric" oninput="odig(this,'d3')" onkeydown="obk(event,this,'d1')">
+      <input class="od" id="d3" maxlength="1" type="text" inputmode="numeric" oninput="odig(this,'d4')" onkeydown="obk(event,this,'d2')">
+      <input class="od" id="d4" maxlength="1" type="text" inputmode="numeric" oninput="odig(this,'d5')" onkeydown="obk(event,this,'d3')">
+      <input class="od" id="d5" maxlength="1" type="text" inputmode="numeric" oninput="odig(this,'d6')" onkeydown="obk(event,this,'d4')">
+      <input class="od" id="d6" maxlength="1" type="text" inputmode="numeric" oninput="odig(this,'')" onkeydown="obk(event,this,'d5')">
+    </div>
+    <div class="otimer">Expires in <span id="timer">02:00</span></div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:18px;">Didn't receive? <button class="resend" id="resend-btn" disabled onclick="resendOTP()">Resend OTP</button></p>
+    <button class="vbtn" onclick="verifyOTP()">✅ VERIFY & CONTINUE</button>
+    <div class="oerr" id="oerr"></div>
+    <div class="bkl" onclick="showPage('p2')">← <span>Change details</span></div>
+  </div>
+</div>
+
+<!-- PAGE 4 — INTRO -->
+<div class="pg" id="p4">
+  <div class="topbar">
+    <div class="tlogo"><span class="bolt">⚡</span>AI-ENERGY</div>
+    <div class="tnav">
+      <button class="np act" onclick="showPage('p4')">Home</button>
+      <button class="np" onclick="showPage('p5')">Predict</button>
+      <button class="np" onclick="showPage('p7')">Dashboard</button>
+      <button class="np" onclick="showPage('p6')">Team</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="uchip"><div class="uav" id="ua1">?</div><div class="uname" id="un1">Guest</div></div>
+      <button class="so-btn" onclick="signOut()">SIGN OUT</button>
+    </div>
+  </div>
+  <div class="p4hero">
+    <div class="p4ic">🔮</div>
+    <div class="stag">APCPDCL Domestic · R²=0.94 · Real Tariff</div>
+    <div class="p4t">Energy Consumption<br>Prediction System</div>
+    <p class="p4s">Predict your real monthly electricity bill using climate parameters. Model trained on 1,500 rows and calibrated to your actual APCPDCL Domestic Category-1 connection (0.51 kW, Prakasam Circle).</p>
+    <div class="tgrid">
+      <div class="tc"><span class="tcn">01</span><span class="tci">🌡️</span><div class="tct">Climate-Aware</div><div class="tcd">Temperature, humidity, wind speed & solar radiation drive the regression. Hot days predict higher consumption.</div></div>
+      <div class="tc"><span class="tcn">02</span><span class="tci">📐</span><div class="tct">Calibrated to Your Home</div><div class="tcd">Raw model output is rescaled using your real APCPDCL bills (Aug 2025–Jan 2026) to give domestic-accurate monthly kWh.</div></div>
+      <div class="tc"><span class="tcn">03</span><span class="tci">🧾</span><div class="tct">Real APCPDCL Tariff</div><div class="tcd">Exact APERC slabs: ₹1.45→₹7.00/unit plus fixed charges, customer charges, electricity duty & FPPCA surcharge.</div></div>
+      <div class="tc"><span class="tcn">04</span><span class="tci">📅</span><div class="tct">1 Day · 1 Week · 1 Month</div><div class="tcd">Cost projections from a single prediction. Enter any custom number of days for your specific needs.</div></div>
+      <div class="tc"><span class="tcn">05</span><span class="tci">🧾</span><div class="tct">Real Bill Receipt</div><div class="tcd">See a complete APCPDCL-style bill with all line items: energy charges, FPPCA, electricity duty — just like your physical receipt.</div></div>
+      <div class="tc"><span class="tcn">06</span><span class="tci">📊</span><div class="tct">Full Dashboard</div><div class="tcd">History stored by email. Month-by-month charts, KPIs and prediction table — all filterable by month name.</div></div>
+    </div>
+    <button class="btn-p" style="font-size:13px;padding:15px 42px;" onclick="showPage('p5')">⚡ START PREDICTION →</button>
+  </div>
+</div>
+
+<!-- PAGE 5 — PREDICTION -->
+<div class="pg" id="p5">
+  <div class="topbar">
+    <div class="tlogo"><span class="bolt">⚡</span>AI-ENERGY</div>
+    <div class="tnav">
+      <button class="np" onclick="showPage('p4')">Home</button>
+      <button class="np act" onclick="showPage('p5')">Predict</button>
+      <button class="np" onclick="showPage('p7')">Dashboard</button>
+      <button class="np" onclick="showPage('p6')">Team</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="uchip"><div class="uav" id="ua2">?</div><div class="uname" id="un2">Guest</div></div>
+      <button class="so-btn" onclick="signOut()">SIGN OUT</button>
+    </div>
+  </div>
+  <div class="p5body">
+    <div style="margin-bottom:22px;">
+      <div class="stag" style="justify-content:flex-start;margin-bottom:6px;">Calibrated to Real APCPDCL Bills · R²=0.94</div>
+      <div style="font-family:'Orbitron',monospace;font-size:clamp(15px,2.4vw,24px);font-weight:700;color:#fff;">Monthly Energy Predictor</div>
+    </div>
+    <div class="p5grid">
+      <!-- INPUT FORM -->
+      <div>
+        <div class="fcard">
+          <div class="ctitle">Climate Parameters</div>
+          <div class="frow">
+            <div class="field"><label>🌡️ Temperature (°C)</label><input type="number" id="f-t" value="22" min="-10" max="45" step="1" oninput="ug()"></div>
+            <div class="field"><label>💧 Humidity (%)</label><input type="number" id="f-h" value="65" min="20" max="100" step="1" oninput="ug()"></div>
+            <div class="field"><label>🌬️ Wind Speed (km/h)</label><input type="number" id="f-w" value="8" min="0" max="15" step=".1" oninput="ug()"></div>
+            <div class="field"><label>☀️ Solar Radiation</label><input type="number" id="f-s" value="500" min="0" max="999" step="1" oninput="ug()"></div>
+          </div>
+          <div class="field"><label>⚡ Peak Hour (1–24)</label><input type="number" id="f-p" value="12" min="1" max="24" step="1" oninput="ug()"></div>
+          <div style="padding:10px 13px;background:rgba(0,200,240,.045);border:1px solid rgba(0,200,240,.1);border-radius:8px;margin-bottom:14px;font-size:12px;color:var(--muted);" id="atime">Loading...</div>
+          <div class="gauges">
+            <div class="gi"><div class="gl"><span>Temperature</span><span class="gv" id="gvt">22°C</span></div><div class="gtr"><div class="gf" id="gft" style="width:57%;background:linear-gradient(90deg,#0af,#f90);"></div></div></div>
+            <div class="gi"><div class="gl"><span>Humidity</span><span class="gv" id="gvh">65%</span></div><div class="gtr"><div class="gf" id="gfh" style="width:65%;background:linear-gradient(90deg,var(--elec),var(--plasma));"></div></div></div>
+            <div class="gi"><div class="gl"><span>Wind Speed</span><span class="gv" id="gvw">8 km/h</span></div><div class="gtr"><div class="gf" id="gfw" style="width:53%;background:linear-gradient(90deg,var(--green),#0af);"></div></div></div>
+            <div class="gi"><div class="gl"><span>Solar Radiation</span><span class="gv" id="gvs">500</span></div><div class="gtr"><div class="gf" id="gfs" style="width:50%;background:linear-gradient(90deg,var(--volt),var(--orange));"></div></div></div>
+            <div class="gi"><div class="gl"><span>Peak Hour</span><span class="gv" id="gvp">12</span></div><div class="gtr"><div class="gf" id="gfp" style="width:50%;background:linear-gradient(90deg,var(--red),var(--orange));"></div></div></div>
+          </div>
+
+          <!-- APPLIANCES SECTION -->
+          <div class="ctitle" style="margin-top:20px;">Electrical Appliances</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Click each appliance to expand and enter usage details</div>
+
+          <!-- AC -->
+          <div class="appl-block" id="blk-ac">
+            <div class="appl-head" onclick="toggleAppl('ac')">
+              <div class="appl-head-left">
+                <span class="appl-icon">❄️</span>
+                <div>
+                  <div class="appl-name">Air Conditioner (AC)</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="appl-kwh-badge" id="badge-ac">0 kWh/month</span>
+                <div class="appl-toggle" id="tog-ac">+</div>
+              </div>
+            </div>
+            <div class="appl-body" id="body-ac">
+              <div class="appl-frow-3">
+                <div class="appl-field"><label>AC Brand</label><select id="ac-brand"><option>LG</option><option>Samsung</option><option>Daikin</option><option>Voltas</option><option>Hitachi</option><option>Blue Star</option><option>Whirlpool</option><option>Godrej</option><option>Other</option></select></div>
+                <div class="appl-field"><label>Type of AC</label><select id="ac-type"><option value="split">Split AC</option><option value="window">Window AC</option><option value="portable">Portable AC</option><option value="cassette">Cassette AC</option></select></div>
+                <div class="appl-field"><label>Tonnage</label><select id="ac-tonnage" onchange="updateAppl('ac')"><option value="0.75">0.75 Ton</option><option value="1.0">1 Ton</option><option value="1.5" selected>1.5 Ton</option><option value="2.0">2 Ton</option><option value="2.5">2.5 Ton</option><option value="3.0">3 Ton</option></select></div>
+              </div>
+              <div class="appl-frow-3">
+                <div class="appl-field"><label>Technology</label><select id="ac-tech" onchange="updateAppl('ac')"><option value="inverter">Inverter</option><option value="noninverter">Non-Inverter</option></select></div>
+                <div class="appl-field"><label>Energy Rating</label><select id="ac-star" onchange="updateAppl('ac')"><option value="1">1 Star</option><option value="2">2 Star</option><option value="3">3 Star</option><option value="4" selected>4 Star</option><option value="5">5 Star</option></select></div>
+                <div class="appl-field"><label>Daily Hours (ON)</label><input type="number" id="ac-hrs" value="6" min="0" max="24" step=".5" oninput="updateAppl('ac')"></div>
+              </div>
+              <div class="appl-field" style="margin-bottom:8px;"><label>How many ACs?</label><input type="number" id="ac-count" value="1" min="0" max="10" oninput="updateAppl('ac')"></div>
+              <div class="appl-note" id="note-ac">1.5T Inverter 4★ · ~1.2 kW · 6 hrs/day → ~216 kWh/month</div>
+              <div class="appl-total-row"><span class="atl">AC Monthly Contribution</span><span class="atv" id="total-ac">216 kWh</span></div>
+            </div>
+          </div>
+
+          <!-- FAN -->
+          <div class="appl-block" id="blk-fan">
+            <div class="appl-head" onclick="toggleAppl('fan')">
+              <div class="appl-head-left"><span class="appl-icon">🌀</span><div><div class="appl-name">Fan</div></div></div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="appl-kwh-badge" id="badge-fan">0 kWh/month</span>
+                <div class="appl-toggle" id="tog-fan">+</div>
+              </div>
+            </div>
+            <div class="appl-body" id="body-fan">
+              <div class="appl-frow">
+                <div class="appl-field"><label>Fan Type</label><select id="fan-type" onchange="updateAppl('fan')"><option value="standard">Standard (75W)</option><option value="highspeed">High-Speed (85W)</option><option value="bldc">BLDC (30W)</option><option value="exhaust">Exhaust Fan (40W)</option></select></div>
+                <div class="appl-field"><label>No. of Fans</label><input type="number" id="fan-count" value="2" min="0" max="20" oninput="updateAppl('fan')"></div>
+              </div>
+              <div class="appl-field" style="margin-bottom:8px;"><label>Daily Hours ON per Fan</label><input type="number" id="fan-hrs" value="10" min="0" max="24" step=".5" oninput="updateAppl('fan')"></div>
+              <div class="appl-note" id="note-fan">2 × Standard fans · 75W · 10 hrs/day → ~45 kWh/month</div>
+              <div class="appl-total-row"><span class="atl">Fan Monthly Contribution</span><span class="atv" id="total-fan">45 kWh</span></div>
+            </div>
+          </div>
+
+          <!-- LIGHTS -->
+          <div class="appl-block" id="blk-light">
+            <div class="appl-head" onclick="toggleAppl('light')">
+              <div class="appl-head-left"><span class="appl-icon">💡</span><div><div class="appl-name">Lights</div></div></div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="appl-kwh-badge" id="badge-light">0 kWh/month</span>
+                <div class="appl-toggle" id="tog-light">+</div>
+              </div>
+            </div>
+            <div class="appl-body" id="body-light">
+              <div class="appl-frow">
+                <div class="appl-field"><label>Bulb Type</label><select id="light-type" onchange="updateAppl('light')"><option value="led9">LED 9W</option><option value="led12">LED 12W</option><option value="led18">LED 18W (tube)</option><option value="cfl">CFL 15W</option><option value="incandescent">Incandescent 60W</option></select></div>
+                <div class="appl-field"><label>No. of Lights</label><input type="number" id="light-count" value="5" min="0" max="50" oninput="updateAppl('light')"></div>
+              </div>
+              <div class="appl-field" style="margin-bottom:8px;"><label>Daily Hours ON (avg)</label><input type="number" id="light-hrs" value="6" min="0" max="24" step=".5" oninput="updateAppl('light')"></div>
+              <div class="appl-note" id="note-light">5 × LED 9W · 6 hrs/day → ~8.1 kWh/month</div>
+              <div class="appl-total-row"><span class="atl">Light Monthly Contribution</span><span class="atv" id="total-light">8.1 kWh</span></div>
+            </div>
+          </div>
+
+          <!-- FRIDGE -->
+          <div class="appl-block" id="blk-fridge">
+            <div class="appl-head" onclick="toggleAppl('fridge')">
+              <div class="appl-head-left"><span class="appl-icon">🧊</span><div><div class="appl-name">Refrigerator</div></div></div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="appl-kwh-badge" id="badge-fridge">0 kWh/month</span>
+                <div class="appl-toggle" id="tog-fridge">+</div>
+              </div>
+            </div>
+            <div class="appl-body" id="body-fridge">
+              <div class="appl-frow">
+                <div class="appl-field"><label>Type</label><select id="fridge-type" onchange="updateAppl('fridge')"><option value="single183">Single 183L (5★) ~15W</option><option value="single190">Single 190L (5★) ~15W</option><option value="single183_3star">Single 183L (3★) ~19W</option><option value="double260">Double 260L (3★) ~26W</option><option value="double272">Double 272L (3★) ~27W</option><option value="sbs653">Side-by-Side 653L ~38W</option></select></div>
+                <div class="appl-field"><label>No. of Fridges</label><input type="number" id="fridge-count" value="1" min="0" max="5" oninput="updateAppl('fridge')"></div>
+              </div>
+              <div class="appl-note" id="note-fridge">Fridge runs 24 hrs. Single 183L 5★ → ~11 kWh/month</div>
+              <div class="appl-total-row"><span class="atl">Fridge Monthly Contribution</span><span class="atv" id="total-fridge">11 kWh</span></div>
+            </div>
+          </div>
+
+          <!-- TV -->
+          <div class="appl-block" id="blk-tv">
+            <div class="appl-head" onclick="toggleAppl('tv')">
+              <div class="appl-head-left"><span class="appl-icon">📺</span><div><div class="appl-name">Television (TV)</div></div></div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="appl-kwh-badge" id="badge-tv">0 kWh/month</span>
+                <div class="appl-toggle" id="tog-tv">+</div>
+              </div>
+            </div>
+            <div class="appl-body" id="body-tv">
+              <div class="appl-frow">
+                <div class="appl-field"><label>TV Type / Size</label><select id="tv-type" onchange="updateAppl('tv')"><option value="32led">32" LED (30W)</option><option value="43led">43" LED (60W)</option><option value="55led">55" LED (100W)</option><option value="65oled">65" OLED (120W)</option><option value="32crt">32" CRT (80W)</option></select></div>
+                <div class="appl-field"><label>No. of TVs</label><input type="number" id="tv-count" value="1" min="0" max="10" oninput="updateAppl('tv')"></div>
+              </div>
+              <div class="appl-field" style="margin-bottom:8px;"><label>Daily Hours ON</label><input type="number" id="tv-hrs" value="5" min="0" max="24" step=".5" oninput="updateAppl('tv')"></div>
+              <div class="appl-note" id="note-tv">1 × 43" LED · 60W · 5 hrs/day → ~9 kWh/month</div>
+              <div class="appl-total-row"><span class="atl">TV Monthly Contribution</span><span class="atv" id="total-tv">9 kWh</span></div>
+            </div>
+          </div>
+
+          <!-- GEYSER / WATER HEATER -->
+          <div class="appl-block" id="blk-geyser">
+            <div class="appl-head" onclick="toggleAppl('geyser')">
+              <div class="appl-head-left"><span class="appl-icon">🚿</span><div><div class="appl-name">Geyser / Water Heater</div></div></div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span class="appl-kwh-badge" id="badge-geyser">0 kWh/month</span>
+                <div class="appl-toggle" id="tog-geyser">+</div>
+              </div>
+            </div>
+            <div class="appl-body" id="body-geyser">
+              <div class="appl-frow">
+                <div class="appl-field"><label>Geyser Type</label><select id="geyser-type" onchange="updateAppl('geyser')"><option value="instant3">Instant 3L (3kW)</option><option value="storage6">Storage 6L (2kW)</option><option value="storage15">Storage 15L (2kW)</option><option value="storage25">Storage 25L (2kW)</option><option value="solar">Solar Water Heater (0.3kW aux)</option></select></div>
+                <div class="appl-field"><label>No. of Geysers</label><input type="number" id="geyser-count" value="1" min="0" max="5" oninput="updateAppl('geyser')"></div>
+              </div>
+              <div class="appl-field" style="margin-bottom:8px;"><label>Daily Hours ON</label><input type="number" id="geyser-hrs" value="1" min="0" max="24" step=".25" oninput="updateAppl('geyser')"></div>
+              <div class="appl-note" id="note-geyser">1 × Storage 6L 2kW · 1 hr/day → ~60 kWh/month</div>
+              <div class="appl-total-row"><span class="atl">Geyser Monthly Contribution</span><span class="atv" id="total-geyser">60 kWh</span></div>
+            </div>
+          </div>
+
+          <!-- APPLIANCE SUMMARY -->
+          <div class="appliance-summary" id="appl-summary">
+            <div class="as-title">⚡ APPLIANCE TOTAL SUMMARY</div>
+            <div class="as-row"><span class="as-lbl">AC</span><span class="as-val" id="sum-ac">0 kWh</span></div>
+            <div class="as-row"><span class="as-lbl">Fan</span><span class="as-val" id="sum-fan">0 kWh</span></div>
+            <div class="as-row"><span class="as-lbl">Lights</span><span class="as-val" id="sum-light">0 kWh</span></div>
+            <div class="as-row"><span class="as-lbl">Fridge</span><span class="as-val" id="sum-fridge">0 kWh</span></div>
+            <div class="as-row"><span class="as-lbl">TV</span><span class="as-val" id="sum-tv">0 kWh</span></div>
+            <div class="as-row"><span class="as-lbl">Geyser</span><span class="as-val" id="sum-geyser">0 kWh</span></div>
+            <div class="as-row" style="border-top:1px solid rgba(0,200,240,.2);margin-top:4px;padding-top:8px;"><span class="as-lbl" style="color:var(--elec);">Total Appliances</span><span class="as-val" style="color:var(--elec);" id="sum-total">0 kWh/month</span></div>
+          </div>
+
+          <button class="sbtn" style="margin-top:16px;" onclick="runPrediction()">⚡ PREDICT WITH ALL APPLIANCES</button>
+        </div>
+      </div>
+
+      <!-- OUTPUT -->
+      <div>
+        <div class="rcard">
+          <div class="ctitle" style="margin-bottom:14px;">Prediction Output</div>
+          <div class="rscreen">
+            <span class="rval" id="r-kwh">— —</span>
+            <span class="runit">kWh / Month (Domestic)</span>
+          </div>
+          <div class="schip">
+            <div class="sdot norm" id="s-dot"></div>
+            <div><div class="stitle" id="s-title">Awaiting Prediction</div><div class="ssub" id="s-sub">Enter parameters and click Predict</div></div>
+          </div>
+
+          <!-- 3 price columns -->
+          <div id="mday-section" style="display:none;">
+            <div style="font-family:'Orbitron',monospace;font-size:10px;color:#fff;letter-spacing:1px;margin-bottom:10px;display:flex;align-items:center;gap:8px;"><span style="width:3px;height:13px;background:var(--volt);border-radius:2px;display:inline-block;"></span>Cost Projections</div>
+            <div class="mday-row">
+              <div class="mday-box"><div class="mdlbl">1 Day</div><div class="mdkwh" id="md-1d-kwh">—</div><div class="mdprice" id="md-1d-price">₹ —</div></div>
+              <div class="mday-box"><div class="mdlbl">1 Week</div><div class="mdkwh" id="md-7d-kwh">—</div><div class="mdprice" id="md-7d-price">₹ —</div></div>
+              <div class="mday-box"><div class="mdlbl">1 Month</div><div class="mdkwh" id="md-30d-kwh">—</div><div class="mdprice" id="md-30d-price">₹ —</div></div>
+            </div>
+          </div>
+
+          <!-- Custom days -->
+          <div class="daysrow" id="days-section" style="display:none;">
+            <div class="field"><label>📅 Custom Days Forecast</label><input type="number" id="cdays" value="5" min="1" max="365"></div>
+            <button onclick="calcCustomDays()">CALCULATE</button>
+          </div>
+          <div class="dres" id="dres">
+            <div class="drrow"><span class="drlbl">Duration</span><span class="drval" id="dr-days">—</span></div>
+            <div class="drrow"><span class="drlbl">Est. kWh</span><span class="drval" id="dr-kwh">—</span></div>
+            <div class="drrow"><span class="drlbl">Est. Bill (APCPDCL)</span><span class="drval" id="dr-price" style="color:var(--green);">—</span></div>
+          </div>
+
+          <div style="font-size:11px;color:var(--muted);padding:8px 11px;background:rgba(0,0,0,.2);border-radius:8px;margin-bottom:4px;" id="r-time"></div>
+          <div class="brows" id="brows"></div>
+        </div>
+
+        <!-- BILL RECEIPT -->
+        <div class="bill-receipt" id="bill-receipt" style="display:none;">
+          <div class="bill-header">
+            <div class="bill-org">APCPDCL</div>
+            <div class="bill-subtitle">Electricity Bill Cum Notice</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:3px;">As Per APERC REG. NO. 5 of 2004</div>
+            <div class="bill-notice">Asking for Bribe? Call 14400</div>
+          </div>
+          <div class="bill-section-title">Consumer Details</div>
+          <div class="bill-meta">
+            <div class="bill-meta-row"><span class="bml">Consumer Name</span><span class="bmv" id="bill-name">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Email</span><span class="bmv" id="bill-email" style="font-size:11px;">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Gender</span><span class="bmv" id="bill-gender">—</span></div>
+            <div class="bill-meta-row"><span class="bml">State</span><span class="bmv" id="bill-state">—</span></div>
+            <div class="bill-meta-row"><span class="bml">District</span><span class="bmv" id="bill-district">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Region / Village</span><span class="bmv" id="bill-region">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Circle</span><span class="bmv">PRAKASAM</span></div>
+            <div class="bill-meta-row"><span class="bml">Bill Date</span><span class="bmv" id="bill-date">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Billing Period</span><span class="bmv" id="bill-period">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Category</span><span class="bmv">DOMESTIC (A)</span></div>
+            <div class="bill-meta-row"><span class="bml">Section</span><span class="bmv">D3 ONGOLE</span></div>
+            <div class="bill-meta-row"><span class="bml">Connected Load</span><span class="bmv">0.51 KW</span></div>
+          </div>
+          <div class="bill-section-title">Meter Details</div>
+          <div class="bill-meta">
+            <div class="bill-meta-row"><span class="bml">Billed Units</span><span class="bmv" id="bill-units">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Average Units</span><span class="bmv" id="bill-avg">—</span></div>
+            <div class="bill-meta-row"><span class="bml">Bill Type</span><span class="bmv">KWH BILLING</span></div>
+            <div class="bill-meta-row"><span class="bml">Metering Type</span><span class="bmv">LT SIDE</span></div>
+          </div>
+          <div class="bill-section-title">Charges Breakdown</div>
+          <div class="bill-row"><span class="bill-row-label">Min/Energy Charges</span><span class="bill-row-val charge" id="bc-energy">—</span></div>
+          <div class="bill-row"><span class="bill-row-label">TOD Charges</span><span class="bill-row-val">₹ 0.00</span></div>
+          <div class="bill-row"><span class="bill-row-label">Fixed Charges</span><span class="bill-row-val charge">₹ 10.00</span></div>
+          <div class="bill-row"><span class="bill-row-label">Customer Charges</span><span class="bill-row-val charge" id="bc-customer">—</span></div>
+          <div class="bill-row"><span class="bill-row-label">Electricity Duty</span><span class="bill-row-val charge" id="bc-ed">—</span></div>
+          <div class="bill-row"><span class="bill-row-label">Surcharge</span><span class="bill-row-val charge">₹ 0.00</span></div>
+          <div class="bill-row"><span class="bill-row-label">Interest on ED</span><span class="bill-row-val">₹ 0.00</span></div>
+          <div class="bill-row"><span class="bill-row-label">FPPCA Charges</span><span class="bill-row-val charge" id="bc-fppca">—</span></div>
+          <div class="bill-row"><span class="bill-row-label">Green Pur. Charges</span><span class="bill-row-val charge" id="bc-green">—</span></div>
+          <div class="bill-row"><span class="bill-row-label">Loss/Gain</span><span class="bill-row-val">₹ 0.00</span></div>
+          <div class="bill-row"><span class="bill-row-label">Govt Subsidy</span><span class="bill-row-val credit">₹ 0.00</span></div>
+          <div class="bill-row"><span class="bill-row-label">Short Fall/PMSG</span><span class="bill-row-val">₹ 0.00</span></div>
+          <div class="bill-row"><span class="bill-row-label">Arrears</span><span class="bill-row-val">₹ 0.00</span></div>
+          <div class="bill-total-box">
+            <div><div class="btl">Total Due</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">APCPDCL Estimate</div></div>
+            <div class="btv" id="bill-total">₹ —</div>
+          </div>
+          <div class="bill-footer">
+            <div>Due Date: <span id="bill-due" style="color:var(--volt);">—</span> &nbsp;|&nbsp; Disconnection Date: <span id="bill-disc" style="color:var(--red);">—</span></div>
+            <div style="margin-top:4px;">Make Digital Payment using Web/Mobile App</div>
+            <div style="margin-top:4px;font-size:10px;color:rgba(0,200,240,.5);">* AI-predicted estimate based on APERC tariff rates. Actual bill may vary.</div>
+          </div>
+          <button class="pdf-dl-btn" onclick="downloadBillPDF()">
+            ⬇️ &nbsp;DOWNLOAD ELECTRICITY BILL PDF
+          </button>
+        </div>
+
+        <!-- CHARTS -->
+        <div class="charts">
+          <div class="chcard"><div class="ctitle">Energy Gauge</div><canvas id="c-gauge"></canvas></div>
+          <div class="chcard"><div class="ctitle">Input Parameters Radar</div><canvas id="c-radar"></canvas></div>
+          <div class="chcard"><div class="ctitle">Bill Slab Breakdown (APCPDCL)</div><canvas id="c-bill"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 6 — TEAM -->
+<div class="pg" id="p6">
+  <div class="topbar">
+    <div class="tlogo"><span class="bolt">⚡</span>AI-ENERGY</div>
+    <div class="tnav">
+      <button class="np" onclick="showPage('p4')">Home</button>
+      <button class="np" onclick="showPage('p5')">Predict</button>
+      <button class="np" onclick="showPage('p7')">Dashboard</button>
+      <button class="np act" onclick="showPage('p6')">Team</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="uchip"><div class="uav" id="ua3">?</div><div class="uname" id="un3">Guest</div></div>
+      <button class="so-btn" onclick="signOut()">SIGN OUT</button>
+    </div>
+  </div>
+  <div class="p6body">
+    <div class="p6head">
+      <div class="team-hero-banner">
+        <div class="thb-grid"></div>
+        <div class="thb-content">
+          <div class="thb-dept">Department of Artificial Intelligence &amp; Machine Learning</div>
+          <div class="thb-title">Our <span class="thb-accent">Team</span></div>
+          <div class="thb-proj">AI-Driven Transformation in Electricity Consumption &amp; Energy Management</div>
+          <div class="thb-meta">
+            <span class="thb-pill">Final Year Project 2025</span>
+            <span class="thb-pill">Batch Y22AM</span>
+            <span class="thb-pill">APCPDCL Research</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="team-grid">
+      <div class="tcard tcard-lead">
+        <div class="tcard-glow"></div>
+        <div class="tav-wrap"><div class="tav">NV</div><div class="tav-ring"></div></div>
+        <div class="tname">N. Vignesh</div>
+        <div class="tid">Y22AM3237</div>
+        <div class="trole-tag ml-tag">Machine Learning Engineer</div>
+        <span class="tlbadge">⭐ Team Leader</span>
+      </div>
+      <div class="tcard">
+        <div class="tcard-glow glow-be"></div>
+        <div class="tav-wrap"><div class="tav tav-be">VA</div></div>
+        <div class="tname">V. Anusha</div>
+        <div class="tid">Y22AM3260</div>
+        <div class="trole-tag be-tag">Backend Developer</div>
+      </div>
+      <div class="tcard">
+        <div class="tcard-glow glow-fe"></div>
+        <div class="tav-wrap"><div class="tav tav-fe">TV</div></div>
+        <div class="tname">T. Venkata Siva Nagaraju</div>
+        <div class="tid">Y22AM3256</div>
+        <div class="trole-tag fe-tag">Frontend Developer</div>
+      </div>
+      <div class="tcard">
+        <div class="tcard-glow glow-de"></div>
+        <div class="tav-wrap"><div class="tav tav-de">CR</div></div>
+        <div class="tname">CH. Rajashekhar</div>
+        <div class="tid">Y22AM3211</div>
+        <div class="trole-tag de-tag">Data Engineer</div>
+      </div>
+      <div class="tcard guide">
+        <div class="tcard-glow glow-guide"></div>
+        <div class="tav-wrap"><div class="tav tav-guide">KP</div></div>
+        <div class="tname">Ms. K. Priyanka</div>
+        <div class="tid">Faculty · AI & ML Dept.</div>
+        <div class="trole-tag guide-tag">Project Guide</div>
+        <span class="gbadge">🎓 Guide</span>
+      </div>
+    </div>
+    <div class="abstract-box">
+      <div class="abs-title">📄 Abstract</div>
+      <div class="abs-text">The in-depth development and widespread application of artificial intelligence technology will have an important impact on electricity demand. However, there are currently few comprehensive analyses. It significantly increases demand through energy-intensive applications like data centers and machine learning, but it can also decrease consumption by optimizing energy use in buildings, grids, and industrial processes. The overall effect depends on balancing the growth in AI computing power with efficiency improvements and the deployment of AI in energy-saving applications. Research shows that the development of artificial intelligence will increase the electricity consumption of data centers, and it is necessary to plan ahead for the infrastructure related to the electricity consumption of artificial intelligence; artificial intelligence plays an important role in promoting the development of demand response, and a large-scale joint dispatch mechanism of electricity and computing power for the power market should be explored, data centers have a large space for energy conservation and carbon reduction, and a sound electricity price mechanism that comprehensively considers green electricity consumption and energy efficiency should be established.</div>
+      <div class="kw-wrap">
+        <span class="kw">Artificial Intelligence</span><span class="kw">Electricity Demand</span><span class="kw">Demand Response</span><span class="kw">Energy Efficiency</span><span class="kw">Neural Networks</span><span class="kw">LSTM</span><span class="kw">Real-time Monitoring</span><span class="kw">PCA</span><span class="kw">Random Forest</span><span class="kw">Linear Regression</span><span class="kw">APCPDCL</span><span class="kw">APERC Tariff</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 7 — DASHBOARD -->
+<div class="pg" id="p7">
+  <div class="topbar">
+    <div class="tlogo"><span class="bolt">⚡</span>AI-ENERGY</div>
+    <div class="tnav">
+      <button class="np" onclick="showPage('p4')">Home</button>
+      <button class="np" onclick="showPage('p5')">Predict</button>
+      <button class="np act" onclick="showPage('p7')">Dashboard</button>
+      <button class="np" onclick="showPage('p6')">Team</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="uchip"><div class="uav" id="ua4">?</div><div class="uname" id="un4">Guest</div></div>
+      <button class="so-btn" onclick="signOut()">SIGN OUT</button>
+    </div>
+  </div>
+  <div class="dbody">
+    <div style="margin-bottom:22px;">
+      <div class="dt">Analytics Dashboard</div>
+      <div class="ds" id="dsub">Track all predictions and history for your account.</div>
+    </div>
+    <div class="month-filter" id="month-filter"></div>
+    <div class="kpirow">
+      <div class="kpi"><div class="kl">Total Predictions</div><div class="kv" id="kpi-tot">0</div><div class="ks">Lifetime</div></div>
+      <div class="kpi"><div class="kl">Avg kWh/Month</div><div class="kv" id="kpi-avg">—</div><div class="ks">Per session</div></div>
+      <div class="kpi"><div class="kl">Highest Peak</div><div class="kv" id="kpi-max">—</div><div class="ks">Max recorded</div></div>
+      <div class="kpi"><div class="kl">Total Bill Est.</div><div class="kv" id="kpi-bill">—</div><div class="ks">Cumulative ₹</div></div>
+      <div class="kpi"><div class="kl">Critical Alerts</div><div class="kv" id="kpi-crit" style="color:var(--red);">0</div><div class="ks">Very high usage</div></div>
+    </div>
+    <div class="dgrid">
+      <div class="dc"><div class="ctitle">Prediction History (kWh/Month)</div><canvas id="d-line" style="display:none;"></canvas><div id="d-line-empty" style="text-align:center;padding:36px;color:var(--muted);">No data yet.</div></div>
+      <div class="dc"><div class="ctitle">Usage Status Distribution</div><canvas id="d-donut" style="display:none;"></canvas><div id="d-donut-empty" style="text-align:center;padding:36px;color:var(--muted);">No data yet.</div></div>
+      <div class="dc"><div class="ctitle">Temperature vs kWh</div><canvas id="d-scatter" style="display:none;"></canvas><div id="d-scatter-empty" style="text-align:center;padding:36px;color:var(--muted);">No data yet.</div></div>
+      <div class="dc"><div class="ctitle">Bill Estimates Over Time (₹)</div><canvas id="d-bar" style="display:none;"></canvas><div id="d-bar-empty" style="text-align:center;padding:36px;color:var(--muted);">No data yet.</div></div>
+    </div>
+    <div class="dc full" style="margin-bottom:18px;overflow-x:auto;">
+      <div class="ctitle">Full Prediction History</div>
+      <table class="hist-table" id="hist-t">
+        <thead><tr>
+          <th>#</th><th>Month</th><th>Date & Time</th><th>Temp°C</th><th>Humidity%</th><th>Wind</th><th>Solar</th><th>Peak Hr</th><th>Predicted kWh</th><th>Monthly Bill ₹</th><th>Daily ₹</th><th>Status</th>
+        </tr></thead>
+        <tbody id="hist-body"><tr><td colspan="12" style="text-align:center;padding:28px;color:var(--muted);">No predictions yet.</td></tr></tbody>
+      </table>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <button class="btn-p" onclick="showPage('p5')">⚡ New Prediction</button>
+      <button class="btn-s" onclick="clearHistory()">🗑 Clear My History</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════
+  CURSOR — thunder bolt with trail sparks
+══════════════════════════════════════════════ */
+const cBolt  = document.getElementById('c-bolt');
+const cHalo  = document.getElementById('c-halo');
+let bx=0,by=0, hx=0,hy=0;   /* bolt pos, halo pos */
+let trailTimer=0;
+
+document.addEventListener('mousemove',e=>{
+  bx=e.clientX; by=e.clientY;
+  /* Bolt tip positioned so tip of lightning aligns with pointer */
+  cBolt.style.transform=`translate(${bx}px,${by}px)`;
+  hx+=(bx-hx)*.12; hy+=(by-hy)*.12;
+  cHalo.style.left=bx+'px'; cHalo.style.top=by+'px';
+  /* Interactive state */
+  const over=e.target.closest('button,a,input,select,.np,.kw,.tcard,.tc,.sbtn,.btn-p,.btn-s,.vbtn,.appl-head');
+  document.body.classList.toggle('c-hover',!!over);
+  /* Trailing sparks every ~55ms */
+  if(Date.now()-trailTimer>55){
+    trailTimer=Date.now();
+    const ts=document.createElement('div');
+    ts.className='c-trail-spark';
+    ts.style.cssText=`left:${bx+Math.random()*6-3}px;top:${by+16+Math.random()*6}px;`;
+    document.body.appendChild(ts);
+    setTimeout(()=>ts.remove(),360);
+  }
+});
+
+/* rAF loop for halo smooth lag */
+(function haloLoop(){
+  hx+=(bx-hx)*.1; hy+=(by-hy)*.1;
+  cHalo.style.transform=`translate(${hx-16}px,${hy-16}px)`;
+  requestAnimationFrame(haloLoop);
+})();
+
+/* Burst on click */
+document.addEventListener('click',e=>{
+  const burst=document.createElement('div');
+  burst.id='c-burst';
+  burst.textContent='⚡';
+  burst.style.cssText=`left:${e.clientX}px;top:${e.clientY}px;color:var(--volt);`;
+  document.body.appendChild(burst);
+  setTimeout(()=>burst.remove(),520);
+  /* Extra mini bolts */
+  ['✦','·','⊹'].forEach((ch,i)=>{
+    const m=document.createElement('div');
+    m.id='c-burst';
+    m.textContent=ch;
+    m.style.cssText=`left:${e.clientX+(i-1)*18}px;top:${e.clientY}px;color:var(--elec);font-size:12px;`;
+    document.body.appendChild(m);
+    setTimeout(()=>m.remove(),520);
+  });
+});
+
+document.addEventListener('mouseleave',()=>{cBolt.style.opacity='0';cHalo.style.opacity='0';});
+document.addEventListener('mouseenter',()=>{cBolt.style.opacity='.92';cHalo.style.opacity='1';});
+
+/* ══════════════════════════════════════════════
+  BACKGROUND CANVAS
+══════════════════════════════════════════════ */
+(function(){
+  const C=document.getElementById('bg'),ctx=C.getContext('2d');
+  let W,H,t=0,pts=[],poles=[],lghts=[];
+  function rsz(){W=C.width=innerWidth;H=C.height=innerHeight;}
+  function bpts(){pts=[];const n=Math.floor(W*H/14500);for(let i=0;i<n;i++)pts.push({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.2,vy:(Math.random()-.5)*.2,r:Math.random()*1.1+.3});}
+  function bpoles(){poles=[];const n=Math.max(3,Math.floor(W/240));for(let i=0;i<=n;i++)poles.push({cx:W*i/n,gy:H*.92,h:H*(.38+Math.random()*.2),bw:22+Math.random()*13});}
+  function dpole(p,a){
+    const{cx,gy,h,bw}=p,ty=gy-h,tw=bw*.22;
+    ctx.save();ctx.globalAlpha=a;
+    ctx.beginPath();ctx.ellipse(cx+h*.1,gy+3,bw*.7,6,0,0,Math.PI*2);ctx.fillStyle='rgba(0,0,0,.28)';ctx.fill();
+    ctx.beginPath();ctx.moveTo(cx+tw/2,ty);ctx.lineTo(cx+tw/2+bw*.27,ty+h*.07);ctx.lineTo(cx+bw/2+bw*.27,gy);ctx.lineTo(cx+bw/2,gy);ctx.closePath();ctx.fillStyle='rgba(0,22,50,.48)';ctx.fill();
+    const g=ctx.createLinearGradient(cx-bw/2,ty,cx+bw/2,gy);g.addColorStop(0,'rgba(0,88,145,.55)');g.addColorStop(1,'rgba(0,14,42,.3)');
+    ctx.beginPath();ctx.moveTo(cx-bw/2,gy);ctx.lineTo(cx+bw/2,gy);ctx.lineTo(cx+tw/2,ty);ctx.lineTo(cx-tw/2,ty);ctx.closePath();ctx.fillStyle=g;ctx.fill();
+    ctx.strokeStyle='rgba(0,180,220,.13)';ctx.lineWidth=.7;
+    for(let s=1;s<=5;s++){const f=s/5,y=gy-h*f,w=bw/2*(1-f)+tw/2*f,yp=gy-h*(s-1)/5,wp=bw/2*(1-(s-1)/5)+tw/2*((s-1)/5);ctx.beginPath();ctx.moveTo(cx-w,y);ctx.lineTo(cx+w,y);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-w,y);ctx.lineTo(cx+wp,yp);ctx.stroke();ctx.beginPath();ctx.moveTo(cx+w,y);ctx.lineTo(cx-wp,yp);ctx.stroke();}
+    [h*.1,h*.22].forEach((dh,i)=>{const ay=ty+dh,aw=bw*(i?1.25:1.65);ctx.strokeStyle='rgba(0,200,240,.48)';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(cx-aw/2,ay);ctx.lineTo(cx+aw/2,ay);ctx.stroke();[cx-aw/2,cx-aw*.3,cx+aw*.3,cx+aw/2].forEach(ix=>{ctx.beginPath();ctx.arc(ix,ay,3.2,0,Math.PI*2);ctx.fillStyle='rgba(135,215,255,.62)';ctx.fill();});});
+    const bl=(Math.sin(t*2.8+cx*.007)+1)*.5;ctx.beginPath();ctx.arc(cx,ty-5,5,0,Math.PI*2);ctx.fillStyle=`rgba(255,55,55,${.42+bl*.55})`;ctx.shadowColor='#ff2828';ctx.shadowBlur=bl*18;ctx.fill();ctx.shadowBlur=0;
+    ctx.restore();
+  }
+  function dwire(x1,y1,x2,y2,sg,a){ctx.save();ctx.globalAlpha=a;ctx.strokeStyle='rgba(0,200,240,.48)';ctx.lineWidth=1.05;ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo((x1+x2)/2,(y1+y2)/2+sg,x2,y2);ctx.stroke();ctx.restore();}
+  function spark2(x1,y1,x2,y2,sg,ph){const pr=((t*.15+ph)%1),mx2=(x1+x2)/2,my2=(y1+y2)/2+sg,bx=(1-pr)*(1-pr)*x1+2*(1-pr)*pr*mx2+pr*pr*x2,by=(1-pr)*(1-pr)*y1+2*(1-pr)*pr*my2+pr*pr*y2;ctx.beginPath();ctx.arc(bx,by,3,0,Math.PI*2);ctx.fillStyle=`rgba(255,215,0,${.48+Math.sin(t*14+ph*8)*.28})`;ctx.shadowColor='#ffd700';ctx.shadowBlur=13;ctx.fill();ctx.shadowBlur=0;}
+  function lghtning(){const sx=Math.random()*W,segs=[];let cx=sx,cy=0;for(let i=0;i<13;i++){const nx=cx+(Math.random()-.5)*75,ny=cy+H*.034+(Math.random()-.5)*13;segs.push({x1:cx,y1:cy,x2:nx,y2:ny});cx=nx;cy=ny;}lghts.push({segs,life:1});document.getElementById('flash').style.opacity='.1';setTimeout(()=>document.getElementById('flash').style.opacity='0',85);}
+  function frame(){rsz();ctx.clearRect(0,0,W,H);t+=.007;
+    for(let i=0;i<pts.length;i++){for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<92){ctx.beginPath();ctx.strokeStyle=`rgba(0,175,215,${.065*(1-d/92)})`;ctx.lineWidth=.4;ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.stroke();}}const p=pts[i];ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle='rgba(0,188,225,.27)';ctx.fill();p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>W)p.vx*=-1;if(p.y<0||p.y>H)p.vy*=-1;}
+    const gg=ctx.createLinearGradient(0,H*.91,0,H);gg.addColorStop(0,'rgba(0,28,55,.42)');gg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gg;ctx.fillRect(0,H*.91,W,H*.09);
+    poles.forEach((p,i)=>dpole(p,.2+.11*Math.sin(t*.4+i)));
+    for(let i=0;i<poles.length-1;i++){const a=poles[i],b=poles[i+1],ay=a.gy-a.h*.87,by=b.gy-b.h*.87;dwire(a.cx,ay,b.cx,by,23,.38);dwire(a.cx,a.gy-a.h*.73,b.cx,b.gy-b.h*.73,16,.22);spark2(a.cx,ay,b.cx,by,23,i*.38);}
+    if(Math.random()<.005&&lghts.length<4)lghtning();
+    lghts=lghts.filter(l=>l.life>0);
+    lghts.forEach(l=>{l.life-=.055;l.segs.forEach(s=>{ctx.save();ctx.globalAlpha=l.life*.78;ctx.strokeStyle=`rgba(175,215,255,${l.life*.78})`;ctx.lineWidth=1.1+l.life;ctx.shadowColor='rgba(140,205,255,.75)';ctx.shadowBlur=5+l.life*11;ctx.beginPath();ctx.moveTo(s.x1,s.y1);ctx.lineTo(s.x2,s.y2);ctx.stroke();ctx.restore();});});
+    requestAnimationFrame(frame);}
+  rsz();bpts();bpoles();frame();
+  window.addEventListener('resize',()=>{rsz();bpts();bpoles();});
+})();
+
+/* ══════════════════════════════════════════════
+  STATE & CONSTANTS
+══════════════════════════════════════════════ */
+const DS_AVG=63.87, REAL_AVG=67.3;
+const COEF={t:0.6101,h:0.2483,w:1.1299,s:0.0399,p:0.8167,c:-0.5046};
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const SK='aienergy_v4_';
+let USER={name:'',gender:'',email:'',state:'',district:'',region:''};
+let OTP='',OTP_T=null,predictions=[];
+let lastKWH=0,lastUnits=0;
+let gaugeC=null,radarC=null,billC=null,dLineC=null,dDonutC=null,dScatterC=null,dBarC=null;
+
+/* ══════════════════════════════════════════════
+  REAL APCPDCL TARIFF (from actual bills)
+══════════════════════════════════════════════ */
+function energyCharge(units, isMonthly){
+  /* APCPDCL APERC Domestic Cat-1 slabs */
+  let u=units, ec=0;
+  if(u>300){ec+=(u-300)*7.00; u=300;}
+  if(u>200){ec+=(u-200)*6.00; u=200;}
+  if(u>100){ec+=(u-100)*4.50; u=100;}
+  if(u>50) {ec+=(u-50)*3.00;  u=50;}
+  if(u>0)  {ec+=u*1.45;}
+  /* Minimum charge Rs 51.30 applies only to a FULL MONTH bill.
+     For daily/weekly projections we use actual slab cost only. */
+  if(isMonthly) ec=Math.max(ec, 51.30);
+  return +ec.toFixed(2);
+}
+
+function calcAPCPDCL(units, periodDays){
+  /* periodDays: 1=daily, 7=weekly, 30=monthly (default)
+    Fixed & customer charges are prorated for partial periods.
+     Energy/FPPCA/surcharge scale with actual units consumed.   */
+  const days = periodDays || 30;
+  const monthly = days >= 28;
+  const ec = energyCharge(units, monthly);
+  /* Prorate fixed charges by days */
+  const fixed    = +(10.00   * days/30).toFixed(2);
+  const customer = +((monthly && units>50 ? 45.00 : 25.00) * days/30).toFixed(2);
+  const ed       = +(ec * 0.0316).toFixed(2);
+  const fppca    = +(units * 0.85).toFixed(2);
+  const surcharge= +(units * 0.39).toFixed(2);
+  const green    = +(units * 0.02).toFixed(2);
+  const total    = +(ec+fixed+customer+ed+fppca+surcharge+green).toFixed(2);
+  return {ec, fixed, customer, ed, fppca, surcharge, green, total};
+}
+
+/* ══════════════════════════════════════════════
+  MONTH NAME HELPERS
+══════════════════════════════════════════════ */
+function monthName(d){return MONTHS[d.getMonth()];}
+function fullMonthYear(d){return MONTHS[d.getMonth()]+' '+d.getFullYear();}
+function billingPeriod(d){
+  // month period like "Aug 25 - Sep 25"
+  const prev=new Date(d.getFullYear(),d.getMonth()-1,1);
+  return MONTHS[prev.getMonth()].slice(0,3)+' '+String(prev.getFullYear()).slice(2)+
+    ' - '+MONTHS[d.getMonth()].slice(0,3)+' '+String(d.getFullYear()).slice(2);
+}
+function dueDate(d){
+  const due=new Date(d); due.setDate(due.getDate()+15);
+  return due.getDate()+' '+MONTHS[due.getMonth()]+' '+due.getFullYear();
+}
+function discDate(d){
+  const disc=new Date(d); disc.setDate(disc.getDate()+30);
+  return due=disc.getDate()+' '+MONTHS[disc.getMonth()]+' '+disc.getFullYear();
+}
+
+/* ══════════════════════════════════════════════
+  PAGE NAVIGATION
+══════════════════════════════════════════════ */
+function showPage(id){
+  document.querySelectorAll('.pg').forEach(p=>{p.classList.remove('on','vis');});
+  const el=document.getElementById(id);
+  el.classList.add('on');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('vis')));
+  window.scrollTo(0,0);
+  if(id==='p1')animCnt();
+  if(id==='p5'){updateAT();ug();}
+  if(id==='p7')renderDash(null);
+}
+
+/* ══════════════════════════════════════════════
+  COUNTER ANIMATION
+══════════════════════════════════════════════ */
+function animCnt(){
+  document.querySelectorAll('.sn[data-to]').forEach(el=>{
+    const to=+el.dataset.to,sx=el.dataset.sx||'';
+    let st=null;
+    (function s(ts){if(!st)st=ts;const p=Math.min((ts-st)/1700,1),e=1-Math.pow(1-p,3);el.textContent=Math.round(e*to)+sx;if(p<1)requestAnimationFrame(s);})(performance.now());
+  });
+}
+setTimeout(animCnt,300);
+
+/* ══════════════════════════════════════════════
+  EMAILJS — Configure here for real OTP
+══════════════════════════════════════════════ */
+/* HOW TO GET REAL OTP WORKING:
+  1. Go to https://emailjs.com → Sign Up (free)
+  2. Add Service → Gmail → note SERVICE_ID
+  3. Email Templates → Create → Subject: "Your AI Energy OTP"
+      Body: "Hello {{to_name}}, Your OTP is: {{otp_code}}. Valid 2 min."
+      → note TEMPLATE_ID
+  4. Account → API Keys → copy PUBLIC_KEY
+  5. Replace the 3 values below:
+*/
+async function sendOTP(){
+  const name    = document.getElementById('inp-name').value.trim();
+  const gender  = document.getElementById('inp-gender').value;
+  const email   = document.getElementById('inp-email').value.trim();
+  const state   = document.getElementById('inp-state').value.trim();
+  const district= document.getElementById('inp-district').value.trim();
+  const region  = document.getElementById('inp-region').value.trim();
+  const err     = document.getElementById('ferr');
+  err.classList.remove('on');
+  if(!name){err.textContent='Please enter your full name.';err.classList.add('on');return;}
+  if(!gender){err.textContent='Please select gender.';err.classList.add('on');return;}
+  if(!email||!/\S+@\S+\.\S+/.test(email)){err.textContent='Please enter a valid email.';err.classList.add('on');return;}
+  /* Save all user details globally */
+  USER={name,gender,email,state,district,region};
+  document.getElementById('sotp-btn').disabled=true;
+  showLoad('SENDING OTP...');
+  try{
+    const res=await fetch('/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`name=${encodeURIComponent(name)}&gender=${encodeURIComponent(gender)}&email=${encodeURIComponent(email)}`
+    });
+    hideLoad();
+    if(res.ok||res.redirected){
+      /* Success — show thunder animation then go to OTP page */
+      document.getElementById('otp-email-lbl').textContent=email;
+      showOTPSentAnim(email);
+    } else {
+      showOTPFailAnim('Server error sending OTP. Check email and try again.');
+    }
+  }catch(e){
+    hideLoad();
+    showOTPFailAnim('Network error: '+e.message);
+  }
+  document.getElementById('sotp-btn').disabled=false;
+}
+async function verifyOTP(){
+  const entered=['d1','d2','d3','d4','d5','d6'].map(id=>document.getElementById(id).value).join('');
+  const errEl=document.getElementById('oerr');
+  if(entered.length<6){
+    errEl.textContent='Enter all 6 digits.';
+    /* Shake the OTP boxes */
+    document.querySelector('.orow').style.animation='none';
+    void document.querySelector('.orow').offsetWidth;
+    document.querySelector('.orow').style.animation='otpShake .4s ease-out';
+    return;
+  }
+  showLoad('VERIFYING OTP...');
+  try{
+    const res=await fetch('/verify_otp',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`otp=${entered}`
+    });
+    /* Read response body to properly detect success vs failure */
+    const bodyText=await res.text();
+    const isSuccess=res.redirected || bodyText.includes('success') || bodyText.includes('verified') || bodyText.includes('home') || (res.ok && !bodyText.toLowerCase().includes('invalid') && !bodyText.toLowerCase().includes('wrong') && !bodyText.toLowerCase().includes('incorrect') && !bodyText.toLowerCase().includes('error'));
+    hideLoad();
+    if(isSuccess){
+      clearInterval(OTP_T);
+      const initials=USER.name.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2)||'U';
+      ['ua1','ua2','ua3','ua4'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=initials;});
+      ['un1','un2','un3','un4'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=USER.name;});
+      document.getElementById('dsub').textContent=`Welcome, ${USER.name} — all your predictions are stored here.`;
+      loadHistory();
+      showOTPVerifiedAnim();
+    } else {
+      hideLoad();
+      showOTPWrongAnim();
+    }
+  }catch(e){
+    hideLoad();
+    showOTPWrongAnim();
+  }
+}
+/* ══════════════════════════════════════════════
+  PREDICTION ENGINE — REAL DOMESTIC VALUES
+══════════════════════════════════════════════ */
+function rawPredict(t,h,w,s,p){
+  return COEF.t*t+COEF.h*h+COEF.w*w+COEF.s*s+COEF.p*p+COEF.c;
+}
+
+/* Nearest-neighbour lookup in embedded dataset */
+const DS=[[17,51,12,137,23,62.84],[21,97,12.09,963,18,108.53],[30,96,8.05,261,15,69.63],[0,32,2.36,426,7,34.01],[31,95,10.76,492,17,85.48],[13,84,5.02,780,7,64.11],[38,40,4.22,172,22,58.03],[1,96,2.6,816,21,73.56],[41,48,13.87,96,20,67.29],[-1,98,6.18,940,7,78.86],[43,44,0.02,65,3,45.39],[26,77,3.55,415,16,70.5],[43,29,5.71,437,19,79.8],[-5,73,7.87,248,21,44.37],[35,63,7.31,650,6,75.46],[31,99,11.04,394,17,84.08],[21,45,11.37,471,13,73.53],[45,60,6.7,336,23,82.14],[44,35,13.26,723,16,84.6],[12,79,11.95,984,13,86.0],[45,93,2.9,957,18,101.45],[29,82,5.47,912,22,95.72],[31,83,14.13,888,6,96.98],[32,45,10.51,949,13,96.61],[39,57,8.01,983,17,107.17],[42,100,9.15,952,21,116.15],[45,47,4.27,974,21,104.03],[28,59,14.58,997,10,103.21],[-10,20,5.71,408,5,20.4],[-10,25,7.81,600,7,37.81],[-10,28,6.13,710,3,32.26],[0,24,9.94,791,8,61.95],[8,62,0.31,73,7,22.21],[-8,81,7.83,37,15,29.79],[19,36,1.82,321,1,30.01],[1,28,1.74,56,10,26.87]];
+function nearestNN(t,h,w,s,p){
+  let best=Infinity,val=DS_AVG;
+  for(const r of DS){const d=Math.abs(r[0]-t)+Math.abs(r[1]-h)*.3+Math.abs(r[2]-w)*2+Math.abs(r[3]-s)*.02+Math.abs(r[4]-p)*.5;if(d<best){best=d;val=r[5];}}
+  return val;
+}
+
+function domesticMonthly(t,h,w,s,p){
+  const raw=rawPredict(t,h,w,s,p);
+  const nn=nearestNN(t,h,w,s,p);
+  const blended=0.7*raw+0.3*nn;
+  // Scale to domestic monthly kWh
+  const monthly=(blended/DS_AVG)*REAL_AVG;
+  return Math.max(10,Math.min(500,+monthly.toFixed(2)));  /* raised cap */
+}
+
+function runPrediction(){
+  const t=+document.getElementById('f-t').value;
+  const h=+document.getElementById('f-h').value;
+  const w=+document.getElementById('f-w').value;
+  const s=+document.getElementById('f-s').value;
+  const p=+document.getElementById('f-p').value;
+  const now=new Date();
+
+  /* Climate-based base prediction */
+  const climateKWH = domesticMonthly(t,h,w,s,p);
+
+  /* Appliance monthly kWh (actual real data) */
+  const appKWH = getApplianceTotal();
+
+  /* Total = climate base + appliances
+    If appliances entered: appliances dominate + climate adds context factor
+     If no appliances: climate-only prediction */
+  let kwh;
+  if(appKWH > 0){
+    /* Weighted blend: appliances = real usage, climate adjusts by ±15% */
+    const climateFactor = 0.85 + (climateKWH/REAL_AVG)*0.15;
+    kwh = +(appKWH * climateFactor).toFixed(2);
+    kwh = Math.max(10, Math.min(2000, kwh));
+  } else {
+    kwh = climateKWH;
+  }
+  lastKWH=kwh;
+
+  // Calculate units (kWh = units for billing)
+  const units=kwh;
+  lastUnits=units;
+  const bill=calcAPCPDCL(units, 30);          /* MONTHLY — minimum charge applies */
+
+  // Daily / weekly projections — NO minimum charge, prorated fixed costs
+  const dailyKWH =+(kwh/30).toFixed(3);
+  const dailyBill =calcAPCPDCL(dailyKWH,  1); /* 1 day  */
+  const weeklyKWH =+(kwh/30*7).toFixed(3);
+  const weeklyBill=calcAPCPDCL(weeklyKWH, 7); /* 7 days */
+
+  // Animate main value
+  animVal('r-kwh',0,kwh,900,v=>v.toFixed(2));
+  document.getElementById('r-time').textContent=`⏱ ${now.toLocaleString()} · ${MONTHS[now.getMonth()]} ${now.getFullYear()} · Hour ${now.getHours()}`;
+
+  // Status — calibrated to real APCPDCL domestic range
+  const dot=document.getElementById('s-dot');
+  const stitle=document.getElementById('s-title');
+  const ssub=document.getElementById('s-sub');
+  dot.className='sdot';
+  let stLbl='',stClass='';
+  if(kwh<30){dot.classList.add('low');stitle.textContent='🟢 Low Usage';ssub.textContent='Minimal consumption — very efficient';stLbl='Low';stClass='low';}
+  else if(kwh<75){dot.classList.add('norm');stitle.textContent='🔵 Normal Usage';ssub.textContent='Within your typical APCPDCL range';stLbl='Normal';stClass='norm';}
+  else if(kwh<110){dot.classList.add('high');stitle.textContent='🟡 High Usage';ssub.textContent='Above average — prepare for higher bill';stLbl='High';stClass='high';}
+  else{dot.classList.add('crit');stitle.textContent='🔴 Very High Usage';ssub.textContent='ALERT! Exceeds typical domestic usage';stLbl='Critical';stClass='crit';}
+
+  // Multi-day section
+  document.getElementById('mday-section').style.display='block';
+  document.getElementById('days-section').style.display='flex';
+  document.getElementById('md-1d-kwh').textContent=(+dailyKWH).toFixed(2)+' kWh';
+  document.getElementById('md-1d-price').textContent='₹ '+dailyBill.total;
+  document.getElementById('md-7d-kwh').textContent=(+weeklyKWH).toFixed(2)+' kWh';
+  document.getElementById('md-7d-price').textContent='₹ '+weeklyBill.total;
+  document.getElementById('md-30d-kwh').textContent=(+kwh).toFixed(2)+' kWh';
+  document.getElementById('md-30d-price').textContent='₹ '+bill.total;
+
+  // Breakdown rows
+  const slabs=[{lo:0,hi:50,rate:1.45,label:'0–50 units @ ₹1.45/unit (APCPDCL Slab 1)'},
+    {lo:50,hi:100,rate:3.00,label:'51–100 units @ ₹3.00/unit (Slab 2)'},
+    {lo:100,hi:200,rate:4.50,label:'101–200 units @ ₹4.50/unit (Slab 3)'},
+    {lo:200,hi:300,rate:6.00,label:'201–300 units @ ₹6.00/unit (Slab 4)'},
+    {lo:300,hi:Infinity,rate:7.00,label:'300+ units @ ₹7.00/unit (Slab 5)'}];
+  let bhtml='',rem=units;
+  const billSlabs=[];
+  slabs.forEach(sl=>{
+    if(rem<=0)return;
+    const used=Math.min(rem,sl.hi-sl.lo);
+    if(used>0){
+      const amt=+(used*sl.rate).toFixed(2);
+      bhtml+=`<div class="br${units>sl.lo&&units<=sl.hi?' act':''}"><span class="brlbl">${sl.label}</span><span class="brval">₹${amt}</span></div>`;
+      billSlabs.push({label:sl.lo+'-'+(sl.hi===Infinity?'300+':sl.hi),amt});
+      rem-=used;
+    }
+  });
+  document.getElementById('brows').innerHTML=bhtml;
+
+  // Generate real bill receipt
+  generateBill(units,bill,now);
+
+  // Charts
+  updateCharts(kwh,t,h,w,s,p,billSlabs,bill);
+
+  // Save prediction
+  predictions.unshift({
+    id:Date.now(),
+    time:now.toLocaleString(),
+    month:fullMonthYear(now),
+    monthNum:now.getMonth(),
+    year:now.getFullYear(),
+    t,h,w,s,p,
+    kwh,cost:bill.total,
+    dailyCost:dailyBill.total,
+    stLbl,stClass
+  });
+  saveHistory();
+
+  const appT=getApplianceTotal();
+  const appNote=appT>0?` (Appliances: ${appT.toFixed(1)} kWh)`:'';
+  toast(`⚡ ${kwh} kWh/month${appNote} · Monthly bill ₹${bill.total}`);
+}
+
+/* ══════════════════════════════════════════════
+  GENERATE APCPDCL-STYLE BILL RECEIPT
+══════════════════════════════════════════════ */
+function generateBill(units,bill,now){
+  const receipt=document.getElementById('bill-receipt');
+  receipt.style.display='block';
+  const avgUnits=Math.round(units/30);
+
+  /* Consumer details — all from registration */
+  document.getElementById('bill-name').textContent    = USER.name     || 'Consumer';
+  document.getElementById('bill-email').textContent   = USER.email    || '—';
+  document.getElementById('bill-gender').textContent  = USER.gender   || '—';
+  document.getElementById('bill-state').textContent   = USER.state    || 'Andhra Pradesh';
+  document.getElementById('bill-district').textContent= USER.district || 'Prakasam';
+  document.getElementById('bill-region').textContent  = USER.region   || '—';
+  document.getElementById('bill-date').textContent    = now.getDate()+' '+MONTHS[now.getMonth()].slice(0,3)+' '+now.getFullYear()+' '+now.toLocaleTimeString();
+  document.getElementById('bill-period').textContent  = billingPeriod(now);
+  document.getElementById('bill-units').textContent=Math.round(units)+' kWh/0 Kvah';
+  document.getElementById('bill-avg').textContent=avgUnits;
+  document.getElementById('bc-energy').textContent='₹ '+bill.ec;
+  document.getElementById('bc-customer').textContent='₹ '+bill.customer;
+  document.getElementById('bc-ed').textContent='₹ '+bill.ed;
+  document.getElementById('bc-fppca').textContent='₹ '+bill.fppca;
+  document.getElementById('bc-green').textContent='₹ '+bill.green;
+  document.getElementById('bill-total').textContent='₹ '+bill.total;
+  document.getElementById('bill-due').textContent=dueDate(now);
+  document.getElementById('bill-disc').textContent=discDate(now);
+}
+
+function calcCustomDays(){
+  const days=+document.getElementById('cdays').value||1;
+  if(!lastKWH){toast('⚠️ Run a prediction first');return;}
+  const totalKWH=+(lastKWH/30*days).toFixed(3);
+  const b=calcAPCPDCL(totalKWH, days);  /* pass actual days — no false minimum */
+  document.getElementById('dr-days').textContent=days+' day'+(days>1?'s':'');
+  document.getElementById('dr-kwh').textContent=totalKWH+' kWh';
+  document.getElementById('dr-price').textContent='₹ '+b.total;
+  document.getElementById('dres').classList.add('on');
+}
+
+/* ══════════════════════════════════════════════
+  GAUGES & AUTO TIME
+══════════════════════════════════════════════ */
+function ug(){
+  const t=+document.getElementById('f-t').value||22,h=+document.getElementById('f-h').value||65,w=+document.getElementById('f-w').value||8,s=+document.getElementById('f-s').value||500,p=+document.getElementById('f-p').value||12;
+  document.getElementById('gvt').textContent=t+'°C';document.getElementById('gvh').textContent=h+'%';document.getElementById('gvw').textContent=w+' km/h';document.getElementById('gvs').textContent=s;document.getElementById('gvp').textContent='Hour '+p;
+  document.getElementById('gft').style.width=Math.min(100,((t+10)/55)*100)+'%';
+  document.getElementById('gfh').style.width=Math.min(100,((h-20)/80)*100)+'%';
+  document.getElementById('gfw').style.width=Math.min(100,(w/15)*100)+'%';
+  document.getElementById('gfs').style.width=Math.min(100,(s/999)*100)+'%';
+  document.getElementById('gfp').style.width=Math.min(100,(p/24)*100)+'%';
+}
+function updateAT(){
+  const n=new Date();
+  document.getElementById('atime').textContent=`⏱ Auto: ${n.toLocaleTimeString()} · ${MONTHS[n.getMonth()]} ${n.getFullYear()} · Hour ${n.getHours()}`;
+}
+function animVal(id,from,to,dur,fmt){
+  const el=document.getElementById(id);let st=null;
+  (function s(ts){if(!st)st=ts;const p=Math.min((ts-st)/dur,1),e=1-Math.pow(1-p,3);el.textContent=fmt(from+(to-from)*e);if(p<1)requestAnimationFrame(s);})(performance.now());
+}
+
+/* ══════════════════════════════════════════════
+  PREDICTION CHARTS
+══════════════════════════════════════════════ */
+const CO={plugins:{legend:{labels:{color:'rgba(212,234,248,.5)',font:{size:11,family:"Inter,sans-serif"}}}},scales:{x:{ticks:{color:'rgba(212,234,248,.38)',font:{size:10}},grid:{color:'rgba(0,200,240,.045)'}},y:{ticks:{color:'rgba(212,234,248,.38)',font:{size:10}},grid:{color:'rgba(0,200,240,.045)'}}}};
+
+function updateCharts(kwh,t,h,w,s,p,bSlabs,bill){
+  const gcolor=kwh<30?'#00e58a':kwh<75?'#00c8f0':kwh<110?'#ffd700':'#ff3d5a';
+  if(gaugeC)gaugeC.destroy();
+  gaugeC=new Chart(document.getElementById('c-gauge'),{type:'doughnut',data:{datasets:[{data:[Math.min(kwh/140,1)*100,(1-Math.min(kwh/140,1))*100],backgroundColor:[gcolor,'rgba(255,255,255,.04)'],borderWidth:0,circumference:270,rotation:225}]},options:{cutout:'70%',responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{enabled:false}}},plugins:[{id:'c',afterDraw(ch){const{ctx,chartArea:{left,top,right,bottom}}=ch,cx=(left+right)/2,cy=(top+bottom)/2;ctx.fillStyle=gcolor;ctx.font="bold 18px 'Orbitron',monospace";ctx.textAlign='center';ctx.fillText(kwh.toFixed(2)+' kWh',cx,cy+4);ctx.fillStyle='rgba(212,234,248,.38)';ctx.font="10px Inter,sans-serif";ctx.fillText('kWh / month (domestic)',cx,cy+20);}}]});
+  if(radarC)radarC.destroy();
+  radarC=new Chart(document.getElementById('c-radar'),{type:'radar',data:{labels:['Temp','Humidity','Wind','Solar','Peak Hr'],datasets:[{label:'Inputs (% of max)',data:[Math.min(100,((t+10)/55)*100),Math.min(100,((h-20)/80)*100),Math.min(100,(w/15)*100),Math.min(100,(s/999)*100),Math.min(100,(p/24)*100)],backgroundColor:'rgba(0,200,240,.09)',borderColor:'rgba(0,200,240,.7)',pointBackgroundColor:'rgba(0,200,240,.9)',pointRadius:4,borderWidth:2}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'rgba(212,234,248,.5)',font:{size:11}}}},scales:{r:{ticks:{color:'rgba(212,234,248,.28)',font:{size:9},backdropColor:'transparent'},grid:{color:'rgba(0,200,240,.07)'},pointLabels:{color:'rgba(212,234,248,.55)',font:{size:10}},min:0,max:100}}}});
+  if(billC)billC.destroy();
+  billC=new Chart(document.getElementById('c-bill'),{type:'bar',data:{labels:bSlabs.map(b=>b.label),datasets:[{label:'₹ (APCPDCL)',data:bSlabs.map(b=>+b.amt.toFixed(2)),backgroundColor:['rgba(0,229,138,.6)','rgba(0,200,240,.6)','rgba(255,215,0,.6)','rgba(255,140,0,.6)','rgba(255,61,90,.6)'],borderRadius:6,borderWidth:0}]},options:{...CO,responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'₹'+c.parsed.y.toFixed(2)}}}}});
+}
+
+/* ══════════════════════════════════════════════
+  DASHBOARD
+══════════════════════════════════════════════ */
+function renderDash(filterMonth){
+  const raw=[...predictions];
+  const months=[...new Set(raw.map(p=>p.month))];
+  const mf=document.getElementById('month-filter');
+  mf.innerHTML='<button class="mf-btn'+(filterMonth===null?' act':'')+'" onclick="renderDash(null)">All Time</button>'+months.map(m=>`<button class="mf-btn${filterMonth===m?' act':''}" onclick="renderDash('${m}')">${m}</button>`).join('');
+  const data=filterMonth?raw.filter(p=>p.month===filterMonth):raw;
+  const empty=!data.length;
+  ['d-line','d-donut','d-scatter','d-bar'].forEach(id=>{document.getElementById(id).style.display=empty?'none':'block';document.getElementById(id+'-empty').style.display=empty?'block':'none';});
+  if(!empty){
+    const sorted=[...data].reverse();
+    const kwhs=sorted.map(p=>p.kwh);
+    const costs=sorted.map(p=>+p.cost);
+    const labels=sorted.map((_,i)=>'#'+(i+1));
+    document.getElementById('kpi-tot').textContent=data.length;
+    document.getElementById('kpi-avg').textContent=(kwhs.reduce((a,b)=>a+b,0)/kwhs.length).toFixed(1);
+    document.getElementById('kpi-max').textContent=Math.max(...kwhs).toFixed(1);
+    document.getElementById('kpi-bill').textContent='₹'+(costs.reduce((a,b)=>a+b,0)).toFixed(0);
+    document.getElementById('kpi-crit').textContent=data.filter(p=>p.stClass==='crit').length;
+    if(dLineC)dLineC.destroy();
+    dLineC=new Chart(document.getElementById('d-line'),{type:'line',data:{labels,datasets:[{label:'kWh/month',data:kwhs,borderColor:'rgba(0,200,240,.8)',backgroundColor:'rgba(0,200,240,.055)',borderWidth:2,pointBackgroundColor:'rgba(0,200,240,.9)',pointRadius:4,tension:.4,fill:true}]},options:{...CO,responsive:true,maintainAspectRatio:true}});
+    const cnt={Low:0,Normal:0,High:0,Critical:0};data.forEach(p=>cnt[p.stLbl]=(cnt[p.stLbl]||0)+1);
+    if(dDonutC)dDonutC.destroy();
+    dDonutC=new Chart(document.getElementById('d-donut'),{type:'doughnut',data:{labels:Object.keys(cnt),datasets:[{data:Object.values(cnt),backgroundColor:['rgba(0,229,138,.7)','rgba(0,200,240,.7)','rgba(255,215,0,.7)','rgba(255,61,90,.7)'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:true,cutout:'63%',plugins:{legend:{labels:{color:'rgba(212,234,248,.5)',font:{size:11}}}}}});
+    if(dScatterC)dScatterC.destroy();
+    dScatterC=new Chart(document.getElementById('d-scatter'),{type:'scatter',data:{datasets:[{label:'Temp vs kWh',data:sorted.map(p=>({x:p.t,y:p.kwh})),backgroundColor:'rgba(0,200,240,.62)',pointRadius:6}]},options:{...CO,responsive:true,maintainAspectRatio:true}});
+    if(dBarC)dBarC.destroy();
+    dBarC=new Chart(document.getElementById('d-bar'),{type:'bar',data:{labels,datasets:[{label:'Bill ₹',data:costs,backgroundColor:'rgba(0,229,138,.52)',borderRadius:5,borderWidth:0}]},options:{...CO,responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}}}});
+    // History table — month names not numbers
+    let rows=data.map((p,i)=>`<tr>
+      <td>${i+1}</td>
+      <td style="color:var(--elec);font-weight:500;">${p.month}</td>
+      <td>${p.time}</td>
+      <td>${p.t}</td><td>${p.h}%</td><td>${p.w}</td><td>${p.s}</td><td>Hr ${p.p}</td>
+      <td style="font-family:'Orbitron',monospace;color:var(--elec);">${(+p.kwh).toFixed(2)}</td>
+      <td style="color:var(--green);">₹${p.cost}</td>
+      <td>₹${p.dailyCost}</td>
+      <td><span class="stag2 st-${p.stClass}">${p.stLbl}</span></td>
+    </tr>`).join('');
+    document.getElementById('hist-body').innerHTML=rows;
+  } else {
+    ['kpi-tot','kpi-avg','kpi-max','kpi-bill','kpi-crit'].forEach(id=>document.getElementById(id).textContent='—');
+    document.getElementById('hist-body').innerHTML='<tr><td colspan="12" style="text-align:center;padding:28px;color:var(--muted);">No predictions yet. Go to Predict to begin.</td></tr>';
+  }
+}
+
+function clearHistory(){
+  if(!confirm('Clear all history for '+USER.email+'?'))return;
+  predictions=[];saveHistory();renderDash(null);toast('🗑 History cleared for '+USER.email);
+}
+
+/* ══════════════════════════════════════════════
+  LOADING & TOAST
+══════════════════════════════════════════════ */
+function showLoad(msg){document.getElementById('ltxt').textContent=msg;document.getElementById('loading').classList.add('on');}
+function hideLoad(){document.getElementById('loading').classList.remove('on');}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),3800);}
+
+/* ══════════════════════════════════════════════
+  APPLIANCE DATA & CALCULATIONS
+══════════════════════════════════════════════ */
+
+/* Appliance wattage lookup table */
+const APPL_DATA = {
+  ac: {
+    watt: function(tonnage, tech, star){
+      /* kW per ton: base 0.85 kW/ton, adjusted for tech & star rating */
+      const baseKW = parseFloat(tonnage) * 0.85;
+      const techMult = tech==='inverter' ? 0.75 : 1.0;
+      const starMult = {1:1.25, 2:1.15, 3:1.05, 4:0.95, 5:0.85}[star] || 1.0;
+      return baseKW * techMult * starMult;
+    }
+  },
+  fan:    {standard:0.075, highspeed:0.085, bldc:0.030, exhaust:0.040},
+  light:  {led9:0.009, led12:0.012, led18:0.018, cfl:0.015, incandescent:0.060},
+  fridge: {single183:0.015, single190:0.015, single183_3star:0.019, double260:0.026, double272:0.027, sbs653:0.038},
+  tv:     {'32led':0.030, '43led':0.060, '55led':0.100, '65oled':0.120, '32crt':0.080},
+  geyser: {instant3:3.0, storage6:2.0, storage15:2.0, storage25:2.0, solar:0.3}
+};
+
+/* Get monthly kWh for each appliance */
+function getACMonthly(){
+  const tonnage=document.getElementById('ac-tonnage').value;
+  const tech=document.getElementById('ac-tech').value;
+  const star=+document.getElementById('ac-star').value;
+  const hrs=+document.getElementById('ac-hrs').value||0;
+  const count=+document.getElementById('ac-count').value||0;
+  const kw=APPL_DATA.ac.watt(tonnage,tech,star);
+  return +(kw * hrs * 30 * count).toFixed(2);
+}
+function getFanMonthly(){
+  const type=document.getElementById('fan-type').value;
+  const kw=APPL_DATA.fan[type]||0.075;
+  const hrs=+document.getElementById('fan-hrs').value||0;
+  const count=+document.getElementById('fan-count').value||0;
+  return +(kw*hrs*30*count).toFixed(2);
+}
+function getLightMonthly(){
+  const type=document.getElementById('light-type').value;
+  const kw=APPL_DATA.light[type]||0.009;
+  const hrs=+document.getElementById('light-hrs').value||0;
+  const count=+document.getElementById('light-count').value||0;
+  return +(kw*hrs*30*count).toFixed(2);
+}
+function getFridgeMonthly(){
+  const type=document.getElementById('fridge-type').value;
+  const kw=APPL_DATA.fridge[type]||0.015;
+  const count=+document.getElementById('fridge-count').value||0;
+  /* Fridge runs 24hr but compressor duty cycle ~40% */
+  return +(kw*24*30*0.4*count).toFixed(2);
+}
+function getTVMonthly(){
+  const type=document.getElementById('tv-type').value;
+  const kw=APPL_DATA.tv[type]||0.060;
+  const hrs=+document.getElementById('tv-hrs').value||0;
+  const count=+document.getElementById('tv-count').value||0;
+  return +(kw*hrs*30*count).toFixed(2);
+}
+function getGeyserMonthly(){
+  const type=document.getElementById('geyser-type').value;
+  const kw=APPL_DATA.geyser[type]||2.0;
+  const hrs=+document.getElementById('geyser-hrs').value||0;
+  const count=+document.getElementById('geyser-count').value||0;
+  return +(kw*hrs*30*count).toFixed(2);
+}
+function getApplianceTotal(){
+  return +(getACMonthly()+getFanMonthly()+getLightMonthly()+getFridgeMonthly()+getTVMonthly()+getGeyserMonthly()).toFixed(2);
+}
+
+/* Toggle appliance block open/close */
+function toggleAppl(id){
+  const blk=document.getElementById('blk-'+id);
+  const tog=document.getElementById('tog-'+id);
+  const isOpen=blk.classList.toggle('open');
+  tog.textContent=isOpen?'−':'+';
+  if(isOpen) updateAppl(id);
+}
+
+/* Update badge and note when user changes values */
+function updateAppl(id){
+  let kwh=0, note='', kwEl, noteEl, totalEl, badgeEl;
+  kwEl=document.getElementById('total-'+id);
+  noteEl=document.getElementById('note-'+id);
+  totalEl=document.getElementById('total-'+id);
+  badgeEl=document.getElementById('badge-'+id);
+
+  if(id==='ac'){
+    kwh=getACMonthly();
+    const t=document.getElementById('ac-tonnage').value;
+    const tech=document.getElementById('ac-tech').value;
+    const star=document.getElementById('ac-star').value;
+    const hrs=document.getElementById('ac-hrs').value;
+    const cnt=document.getElementById('ac-count').value;
+    const kw=APPL_DATA.ac.watt(t,tech,+star);
+    note=`${cnt}×${t}T ${tech==='inverter'?'Inverter':'Non-Inv'} ${star}★ · ${kw.toFixed(2)}kW · ${hrs}hrs/day → ~${kwh}kWh/month`;
+  } else if(id==='fan'){
+    kwh=getFanMonthly();
+    const type=document.getElementById('fan-type').value;
+    const typeLabel={standard:'Standard 75W',highspeed:'High-Speed 85W',bldc:'BLDC 30W',exhaust:'Exhaust 40W'}[type];
+    note=`${document.getElementById('fan-count').value}× ${typeLabel} · ${document.getElementById('fan-hrs').value}hrs/day → ~${kwh}kWh/month`;
+  } else if(id==='light'){
+    kwh=getLightMonthly();
+    const type=document.getElementById('light-type').value;
+    const typeLabel={led9:'LED 9W',led12:'LED 12W',led18:'LED Tube 18W',cfl:'CFL 15W',incandescent:'Incandescent 60W'}[type];
+    note=`${document.getElementById('light-count').value}× ${typeLabel} · ${document.getElementById('light-hrs').value}hrs/day → ~${kwh}kWh/month`;
+  } else if(id==='fridge'){
+    kwh=getFridgeMonthly();
+    note=`Fridge runs 24hrs (40% duty cycle) → ~${kwh}kWh/month`;
+  } else if(id==='tv'){
+    kwh=getTVMonthly();
+    const type=document.getElementById('tv-type').value;
+    const typeLabel={'32led':'32" LED 30W','43led':'43" LED 60W','55led':'55" LED 100W','65oled':'65" OLED 120W','32crt':'32" CRT 80W'}[type];
+    note=`${document.getElementById('tv-count').value}× ${typeLabel} · ${document.getElementById('tv-hrs').value}hrs/day → ~${kwh}kWh/month`;
+  } else if(id==='geyser'){
+    kwh=getGeyserMonthly();
+    const type=document.getElementById('geyser-type').value;
+    const kw=APPL_DATA.geyser[type];
+    note=`${document.getElementById('geyser-count').value}× ${kw}kW · ${document.getElementById('geyser-hrs').value}hrs/day → ~${kwh}kWh/month`;
+  }
+
+  if(noteEl) noteEl.textContent=note;
+  if(kwEl) kwEl.textContent=kwh+' kWh';
+  if(badgeEl) badgeEl.textContent=kwh+' kWh/month';
+  document.getElementById('sum-'+id).textContent=kwh+' kWh';
+
+  /* Update summary totals */
+  const total=getApplianceTotal();
+  document.getElementById('sum-total').textContent=total+' kWh/month';
+  /* Show summary if any appliance > 0 */
+  document.getElementById('appl-summary').classList.toggle('on', total>0);
+}
+
+/* ══════════════════════════════════════════════
+  STATE / DISTRICT / REGION DATA & SEARCH
+══════════════════════════════════════════════ */
+const INDIA_STATES=[
+  "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
+  "Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh",
+  "Maharashtra","Manipur","Meghalaya","Mizoram","Nagaland","Odisha","Punjab",
+  "Rajasthan","Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh",
+  "Uttarakhand","West Bengal","Andaman and Nicobar Islands","Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu","Delhi","Jammu and Kashmir",
+  "Ladakh","Lakshadweep","Puducherry"
+];
+
+const DISTRICTS_BY_STATE={
+  "Andhra Pradesh":["Alluri Sitharama Raju","Anakapalli","Anantapur","Annamayya","Bapatla","Chittoor","East Godavari","Eluru","Guntur","Kakinada","Krishna","Kurnool","Nandyal","NTR","Palnadu","Parvathipuram Manyam","Prakasam","Sri Potti Sriramulu Nellore","Sri Sathya Sai","Srikakulam","Tirupati","Visakhapatnam","Vizianagaram","West Godavari","YSR Kadapa"],
+  "Telangana":["Adilabad","Bhadradri Kothagudem","Hanamkonda","Hyderabad","Jagtial","Jangaon","Jayashankar Bhupalpally","Jogulamba Gadwal","Kamareddy","Karimnagar","Khammam","Kumuram Bheem","Mahabubabad","Mahabubnagar","Mancherial","Medak","Medchal-Malkajgiri","Mulugu","Nagarkurnool","Nalgonda","Narayanpet","Nirmal","Nizamabad","Peddapalli","Rajanna Sircilla","Rangareddy","Sangareddy","Siddipet","Suryapet","Vikarabad","Wanaparthy","Warangal","Yadadri Bhuvanagiri"],
+  "Karnataka":["Bagalkot","Ballari","Belagavi","Bengaluru Rural","Bengaluru Urban","Bidar","Chamarajanagar","Chikballapur","Chikkamagaluru","Chitradurga","Dakshina Kannada","Davangere","Dharwad","Gadag","Hassan","Haveri","Kalaburagi","Kodagu","Kolar","Koppal","Mandya","Mysuru","Raichur","Ramanagara","Shivamogga","Tumakuru","Udupi","Uttara Kannada","Vijayapura","Yadgir"],
+  "Tamil Nadu":["Ariyalur","Chengalpattu","Chennai","Coimbatore","Cuddalore","Dharmapuri","Dindigul","Erode","Kallakurichi","Kancheepuram","Kanyakumari","Karur","Krishnagiri","Madurai","Nagapattinam","Namakkal","Nilgiris","Perambalur","Pudukottai","Ramanathapuram","Ranipet","Salem","Sivaganga","Tenkasi","Thanjavur","Theni","Thoothukudi","Tiruchirappalli","Tirunelveli","Tirupathur","Tiruppur","Tiruvallur","Tiruvannamalai","Tiruvarur","Vellore","Viluppuram","Virudhunagar"],
+  "Maharashtra":["Ahmednagar","Akola","Amravati","Aurangabad","Beed","Bhandara","Buldhana","Chandrapur","Dhule","Gadchiroli","Gondia","Hingoli","Jalgaon","Jalna","Kolhapur","Latur","Mumbai City","Mumbai Suburban","Nagpur","Nanded","Nandurbar","Nashik","Osmanabad","Palghar","Parbhani","Pune","Raigad","Ratnagiri","Sangli","Satara","Sindhudurg","Solapur","Thane","Wardha","Washim","Yavatmal"],
+  "Uttar Pradesh":["Agra","Aligarh","Prayagraj","Ambedkar Nagar","Amethi","Amroha","Auraiya","Azamgarh","Baghpat","Bahraich","Ballia","Balrampur","Banda","Barabanki","Bareilly","Basti","Bhadohi","Bijnor","Budaun","Bulandshahr","Chandauli","Chitrakoot","Deoria","Etah","Etawah","Ayodhya","Farrukhabad","Fatehpur","Firozabad","Gautam Buddha Nagar","Ghaziabad","Ghazipur","Gonda","Gorakhpur","Hamirpur","Hapur","Hardoi","Hathras","Jalaun","Jaunpur","Jhansi","Kannauj","Kanpur Dehat","Kanpur Nagar","Kasganj","Kaushambi","Kheri","Kushinagar","Lalitpur","Lucknow","Maharajganj","Mahoba","Mainpuri","Mathura","Mau","Meerut","Mirzapur","Moradabad","Muzaffarnagar","Pilibhit","Pratapgarh","Raebareli","Rampur","Saharanpur","Sambhal","Sant Kabir Nagar","Shahjahanpur","Shamli","Shrawasti","Siddharthnagar","Sitapur","Sonbhadra","Sultanpur","Unnao","Varanasi"],
+  "West Bengal":["Alipurduar","Bankura","Birbhum","Cooch Behar","Dakshin Dinajpur","Darjeeling","Hooghly","Howrah","Jalpaiguri","Jhargram","Kalimpong","Kolkata","Malda","Murshidabad","Nadia","North 24 Parganas","Paschim Bardhaman","Paschim Medinipur","Purba Bardhaman","Purba Medinipur","Purulia","South 24 Parganas","Uttar Dinajpur"],
+  "Rajasthan":["Ajmer","Alwar","Banswara","Baran","Barmer","Bharatpur","Bhilwara","Bikaner","Bundi","Chittorgarh","Churu","Dausa","Dholpur","Dungarpur","Ganganagar","Hanumangarh","Jaipur","Jaisalmer","Jalore","Jhalawar","Jhunjhunu","Jodhpur","Karauli","Kota","Nagaur","Pali","Pratapgarh","Rajsamand","Sawai Madhopur","Sikar","Sirohi","Tonk","Udaipur"],
+  "Madhya Pradesh":["Agar Malwa","Alirajpur","Anuppur","Ashoknagar","Balaghat","Barwani","Betul","Bhind","Bhopal","Burhanpur","Chhatarpur","Chhindwara","Damoh","Datia","Dewas","Dhar","Dindori","Guna","Gwalior","Harda","Hoshangabad","Indore","Jabalpur","Jhabua","Katni","Khandwa","Khargone","Mandla","Mandsaur","Morena","Narsinghpur","Neemuch","Niwari","Panna","Raisen","Rajgarh","Ratlam","Rewa","Sagar","Satna","Sehore","Seoni","Shahdol","Shajapur","Sheopur","Shivpuri","Sidhi","Singrauli","Tikamgarh","Ujjain","Umaria","Vidisha"],
+  "Gujarat":["Ahmedabad","Amreli","Anand","Aravalli","Banaskantha","Bharuch","Bhavnagar","Botad","Chhota Udaipur","Dahod","Dang","Devbhumi Dwarka","Gandhinagar","Gir Somnath","Jamnagar","Junagadh","Kheda","Kutch","Mahisagar","Mehsana","Morbi","Narmada","Navsari","Panchmahal","Patan","Porbandar","Rajkot","Sabarkantha","Surat","Surendranagar","Tapi","Vadodara","Valsad"],
+  "Bihar":["Araria","Arwal","Aurangabad","Banka","Begusarai","Bhagalpur","Bhojpur","Buxar","Darbhanga","East Champaran","Gaya","Gopalganj","Jamui","Jehanabad","Kaimur","Katihar","Khagaria","Kishanganj","Lakhisarai","Madhepura","Madhubani","Munger","Muzaffarpur","Nalanda","Nawada","Patna","Purnia","Rohtas","Saharsa","Samastipur","Saran","Sheikhpura","Sheohar","Sitamarhi","Siwan","Supaul","Vaishali","West Champaran"],
+  "Odisha":["Angul","Balangir","Balasore","Bargarh","Bhadrak","Boudh","Cuttack","Deogarh","Dhenkanal","Gajapati","Ganjam","Jagatsinghpur","Jajpur","Jharsuguda","Kalahandi","Kandhamal","Kendrapara","Kendujhar","Khordha","Koraput","Malkangiri","Mayurbhanj","Nabarangpur","Nayagarh","Nuapada","Puri","Rayagada","Sambalpur","Sonepur","Sundargarh"],
+  "Punjab":["Amritsar","Barnala","Bathinda","Faridkot","Fatehgarh Sahib","Fazilka","Firozpur","Gurdaspur","Hoshiarpur","Jalandhar","Kapurthala","Ludhiana","Mansa","Moga","Mohali","Muktsar","Nawanshahr","Pathankot","Patiala","Rupnagar","Sangrur","Tarn Taran"],
+  "Haryana":["Ambala","Bhiwani","Charkhi Dadri","Faridabad","Fatehabad","Gurugram","Hisar","Jhajjar","Jind","Kaithal","Karnal","Kurukshetra","Mahendragarh","Nuh","Palwal","Panchkula","Panipat","Rewari","Rohtak","Sirsa","Sonipat","Yamunanagar"],
+  "Kerala":["Alappuzha","Ernakulam","Idukki","Kannur","Kasaragod","Kollam","Kottayam","Kozhikode","Malappuram","Palakkad","Pathanamthitta","Thiruvananthapuram","Thrissur","Wayanad"],
+  "Jharkhand":["Bokaro","Chatra","Deoghar","Dhanbad","Dumka","East Singhbhum","Garhwa","Giridih","Godda","Gumla","Hazaribagh","Jamtara","Khunti","Koderma","Latehar","Lohardaga","Pakur","Palamu","Ramgarh","Ranchi","Sahebganj","Seraikela Kharsawan","Simdega","West Singhbhum"],
+  "Chhattisgarh":["Balod","Baloda Bazar","Balrampur","Bastar","Bemetara","Bijapur","Bilaspur","Dantewada","Dhamtari","Durg","Gariaband","Janjgir-Champa","Jashpur","Kabirdham","Kanker","Kondagaon","Korba","Koriya","Mahasamund","Mungeli","Narayanpur","Raigarh","Raipur","Rajnandgaon","Sukma","Surajpur","Surguja"],
+  "Assam":["Bajali","Baksa","Barpeta","Biswanath","Bongaigaon","Cachar","Charaideo","Chirang","Darrang","Dhemaji","Dhubri","Dibrugarh","Dima Hasao","Goalpara","Golaghat","Hailakandi","Hojai","Jorhat","Kamrup","Kamrup Metropolitan","Karbi Anglong","Karimganj","Kokrajhar","Lakhimpur","Majuli","Morigaon","Nagaon","Nalbari","Sivasagar","Sonitpur","South Salmara-Mankachar","Tinsukia","Udalguri","West Karbi Anglong"],
+  "Himachal Pradesh":["Bilaspur","Chamba","Hamirpur","Kangra","Kinnaur","Kullu","Lahaul and Spiti","Mandi","Shimla","Sirmaur","Solan","Una"],
+  "Uttarakhand":["Almora","Bageshwar","Chamoli","Champawat","Dehradun","Haridwar","Nainital","Pauri Garhwal","Pithoragarh","Rudraprayag","Tehri Garhwal","Udham Singh Nagar","Uttarkashi"],
+  "Goa":["North Goa","South Goa"],
+  "Manipur":["Bishnupur","Chandel","Churachandpur","Imphal East","Imphal West","Jiribam","Kakching","Kamjong","Kangpokpi","Noney","Pherzawl","Senapati","Tamenglong","Tengnoupal","Thoubal","Ukhrul"],
+  "Meghalaya":["East Garo Hills","East Jaintia Hills","East Khasi Hills","Eastern West Khasi Hills","North Garo Hills","Ri Bhoi","South Garo Hills","South West Garo Hills","South West Khasi Hills","West Garo Hills","West Jaintia Hills","West Khasi Hills"],
+  "Mizoram":["Aizawl","Champhai","Hnahthial","Khawzawl","Kolasib","Lawngtlai","Lunglei","Mamit","Saiha","Saitual","Serchhip"],
+  "Nagaland":["Chumoukedima","Dimapur","Kiphire","Kohima","Longleng","Mokokchung","Mon","Niuland","Noklak","Peren","Phek","Shamator","Tseminyü","Tuensang","Wokha","Zunheboto"],
+  "Tripura":["Dhalai","Gomati","Khowai","North Tripura","Sepahijala","South Tripura","Unakoti","West Tripura"],
+  "Sikkim":["East Sikkim","North Sikkim","Pakyong","Soreng","South Sikkim","West Sikkim"],
+  "Arunachal Pradesh":["Anjaw","Changlang","Dibang Valley","East Kameng","East Siang","Kamle","Kra Daadi","Kurung Kumey","Lepa Rada","Lohit","Longding","Lower Dibang Valley","Lower Siang","Lower Subansiri","Namsai","Pakke-Kessang","Papum Pare","Shi Yomi","Siang","Tawang","Tirap","Upper Dibang Valley","Upper Siang","Upper Subansiri","West Kameng","West Siang"],
+  "Delhi":["Central Delhi","East Delhi","New Delhi","North Delhi","North East Delhi","North West Delhi","Shahdara","South Delhi","South East Delhi","South West Delhi","West Delhi"],
+  "Jammu and Kashmir":["Anantnag","Bandipore","Baramulla","Budgam","Doda","Ganderbal","Jammu","Kathua","Kishtwar","Kulgam","Kupwara","Poonch","Pulwama","Rajouri","Ramban","Reasi","Samba","Shopian","Srinagar","Udhampur"],
+  "Ladakh":["Kargil","Leh"],
+  "Chandigarh":["Chandigarh"],
+  "Puducherry":["Karaikal","Mahe","Puducherry","Yanam"],
+  "Andaman and Nicobar Islands":["Nicobar","North and Middle Andaman","South Andaman"],
+  "Dadra and Nagar Haveli and Daman and Diu":["Dadra and Nagar Haveli","Daman","Diu"],
+  "Lakshadweep":["Lakshadweep"]
+};
+// Default districts for states not listed
+function getDistricts(state){
+  return DISTRICTS_BY_STATE[state]||[];
+}
+
+let stateDropOpen=false;
+function filterStates(val){
+  const drop=document.getElementById('state-drop');
+  const q=val.trim().toLowerCase();
+  const matches=INDIA_STATES.filter(s=>s.toLowerCase().includes(q));
+  renderDrop(drop,'state',matches,val);
+}
+function filterDistricts(val){
+  const state=document.getElementById('inp-state').value;
+  const drop=document.getElementById('dist-drop');
+  const dists=getDistricts(state);
+  const q=val.trim().toLowerCase();
+  const matches=dists.filter(d=>d.toLowerCase().includes(q));
+  renderDrop(drop,'dist',matches,val);
+}
+function renderDrop(drop,type,items,val){
+  if(!items.length){drop.style.display='none';return;}
+  drop.style.display='block';
+  drop.innerHTML=items.slice(0,10).map(item=>
+    `<div class="loc-item" onmousedown="selectLoc('${type}','${item.replace(/'/g,"\'")}')">
+      <span style="color:var(--elec);">${item.slice(0,val.length)}</span>${item.slice(val.length)}
+    </div>`
+  ).join('');
+}
+function selectLoc(type,val){
+  if(type==='state'){
+    document.getElementById('inp-state').value=val;
+    document.getElementById('state-drop').style.display='none';
+    document.getElementById('inp-district').value='';
+    document.getElementById('dist-drop').style.display='none';
+  } else {
+    document.getElementById('inp-district').value=val;
+    document.getElementById('dist-drop').style.display='none';
+  }
+}
+function openDrop(id){document.getElementById(id).style.display='block';}
+function closeDrop(id,delay){setTimeout(()=>{const el=document.getElementById(id);if(el)el.style.display='none';},delay);}
+
+/* ══════════════════════════════════════════════
+  OTP ANIMATIONS — thunder/success/fail
+══════════════════════════════════════════════ */
+
+function showOTPAnim(icon, title, sub, email, btnLabel, btnStyle, nextFn){
+  const overlay=document.getElementById('otp-anim-overlay');
+  document.getElementById('otp-anim-icon').textContent=icon;
+  document.getElementById('otp-anim-title').textContent=title;
+  document.getElementById('otp-anim-sub').textContent=sub;
+  document.getElementById('otp-anim-email').textContent=email||'';
+  document.getElementById('otp-anim-email').style.display=email?'inline-block':'none';
+  const btn=document.getElementById('otp-anim-btn');
+  btn.textContent=btnLabel;
+  btn.style=btnStyle;
+  btn.onclick=()=>{
+    overlay.style.display='none';
+    if(nextFn)nextFn();
+  };
+  overlay.style.display='flex';
+  /* Re-trigger icon animation */
+  const ic=document.getElementById('otp-anim-icon');
+  ic.style.animation='none';
+  void ic.offsetWidth;
+  ic.style.animation='oaIcon .5s cubic-bezier(.68,-0.55,.27,1.55)';
+}
+
+function showOTPSentAnim(email){
+  /* Thunder effect on canvas */
+  runThunderCanvas();
+  showOTPAnim(
+    '⚡',
+    'OTP Sent!',
+    'A 6-digit verification code has been sent to your registered email. Check your inbox (and spam folder).',
+    email,
+    'ENTER OTP →',
+    'background:linear-gradient(135deg,var(--elec),var(--plasma));color:#fff;border-radius:10px;padding:13px 32px;font-family:Orbitron,monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;',
+    ()=>{showPage('p3');startTimer();}
+  );
+}
+
+function showOTPVerifiedAnim(){
+  /* Green success burst */
+  const overlay=document.getElementById('otp-anim-overlay');
+  overlay.style.background='rgba(0,18,8,.96)';
+  showOTPAnim(
+    '✅',
+    'Verified! Welcome',
+    USER.name+' — Your identity is confirmed. You now have full access to the AI Energy platform.',
+    USER.email,
+    '⚡ ENTER PLATFORM →',
+    'background:linear-gradient(135deg,var(--green),#00a86b);color:#020a14;border-radius:10px;padding:13px 32px;font-family:Orbitron,monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;',
+    ()=>{overlay.style.background='rgba(2,10,20,.96)';showPage('p4');}
+  );
+  /* Flashing green overlay */
+  const fl=document.getElementById('flash');
+  if(fl){
+    fl.style.background='rgba(0,229,138,.06)';
+    fl.style.opacity='.5';
+    setTimeout(()=>{fl.style.opacity='0';fl.style.background='rgba(200,230,255,.055)';},600);
+  }
+}
+
+function showOTPFailedAnim(){ showOTPWrongAnim(); }
+
+function showOTPWrongAnim(){
+  /* 1. Shake the OTP input boxes */
+  const orow=document.querySelector('.orow');
+  if(orow){
+    orow.style.animation='none';
+    void orow.offsetWidth;
+    orow.style.animation='otpShake .45s ease-out';
+  }
+  /* 2. Red flash on page background */
+  const fl=document.getElementById('flash');
+  if(fl){
+    fl.style.background='rgba(255,61,90,.07)';
+    fl.style.transition='opacity .05s';
+    fl.style.opacity='.7';
+    setTimeout(()=>{fl.style.opacity='0';setTimeout(()=>{fl.style.background='rgba(200,230,255,.055)';fl.style.transition='opacity .1s';},300);},180);
+  }
+  /* 3. Red-tint the OTP boxes briefly */
+  ['d1','d2','d3','d4','d5','d6'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.style.borderColor='var(--red)';
+      el.style.background='rgba(255,61,90,.1)';
+      el.style.boxShadow='0 0 0 3px rgba(255,61,90,.18)';
+    }
+  });
+  /* 4. After 600ms clear boxes and show fullscreen overlay */
+  setTimeout(()=>{
+    ['d1','d2','d3','d4','d5','d6'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){el.value='';el.classList.remove('ok');el.style.borderColor='';el.style.background='';el.style.boxShadow='';}
+    });
+    /* 5. Full-screen wrong OTP overlay */
+    const overlay=document.getElementById('otp-anim-overlay');
+    overlay.style.background='rgba(18,2,4,.97)';
+    /* Show electric crackling wrong animation */
+    runWrongOTPCanvas();
+    showOTPAnim(
+      '❌',
+      'Wrong OTP!',
+      'The code doesn\'t match. Please check your email inbox (and spam folder) for the correct 6-digit code.',
+      '',
+      '🔄  TRY AGAIN',
+      'background:linear-gradient(135deg,var(--red),#c0002e);color:#fff;border-radius:10px;padding:13px 36px;font-family:Orbitron,monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;box-shadow:0 0 22px rgba(255,61,90,.4);',
+      ()=>{
+        overlay.style.background='rgba(2,10,20,.96)';
+        document.getElementById('oerr').textContent='';
+        document.getElementById('d1')?.focus();
+      }
+    );
+    document.getElementById('d1')?.focus();
+  },650);
+}
+
+function runWrongOTPCanvas(){
+  /* Red crackling static electricity — wrong OTP visual */
+  const cv=document.getElementById('thunder-canvas');
+  if(!cv)return;
+  cv.width=window.innerWidth; cv.height=window.innerHeight;
+  const ctx=cv.getContext('2d');
+  let frame=0;
+  function crackle(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    /* Red static flicker overlay */
+    ctx.fillStyle=`rgba(255,20,40,${0.025+Math.random()*0.03})`;
+    ctx.fillRect(0,0,cv.width,cv.height);
+    /* Short jagged red arcs */
+    for(let i=0;i<6;i++){
+      ctx.save();
+      ctx.globalAlpha=0.5+Math.random()*0.5;
+      ctx.strokeStyle=`rgba(255,${20+Math.floor(Math.random()*60)},60,0.9)`;
+      ctx.lineWidth=1+Math.random()*2;
+      ctx.shadowColor='rgba(255,30,30,.8)';
+      ctx.shadowBlur=12;
+      const sx=Math.random()*cv.width;
+      const sy=Math.random()*cv.height*.6;
+      ctx.beginPath(); ctx.moveTo(sx,sy);
+      let cx2=sx,cy2=sy;
+      for(let j=0;j<6;j++){
+        cx2+=(Math.random()-.5)*80; cy2+=cv.height*0.06+(Math.random()-.5)*20;
+        ctx.lineTo(cx2,cy2);
+      }
+      ctx.stroke(); ctx.restore();
+    }
+    /* Scanlines effect */
+    for(let y=0;y<cv.height;y+=4){
+      ctx.fillStyle=`rgba(0,0,0,${0.03+Math.random()*0.04})`;
+      ctx.fillRect(0,y,cv.width,2);
+    }
+    frame++;
+    if(frame<55) requestAnimationFrame(crackle);
+    else ctx.clearRect(0,0,cv.width,cv.height);
+  }
+  requestAnimationFrame(crackle);
+}
+
+function showOTPFailAnim(msg){
+  showOTPAnim(
+    '⚠️',
+    'Could Not Send OTP',
+    msg||'Failed to send OTP. Please check your email and try again.',
+    '',
+    '← TRY AGAIN',
+    'background:linear-gradient(135deg,var(--volt),var(--orange));color:#1a0a00;border-radius:10px;padding:13px 32px;font-family:Orbitron,monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;',
+    null
+  );
+}
+
+function closeOTPAnim(){
+  document.getElementById('otp-anim-overlay').style.display='none';
+}
+
+/* ── THUNDER CANVAS ANIMATION ── */
+function runThunderCanvas(){
+  const cv=document.getElementById('thunder-canvas');
+  if(!cv)return;
+  cv.width=window.innerWidth;
+  cv.height=window.innerHeight;
+  const ctx=cv.getContext('2d');
+  let frame=0;
+  const bolts=[];
+  function mkBolt(){
+    const sx=Math.random()*cv.width;
+    const segs=[];
+    let cx=sx,cy=0;
+    for(let i=0;i<18;i++){
+      const nx=cx+(Math.random()-.5)*90;
+      const ny=cy+cv.height/18+(Math.random()-.5)*15;
+      segs.push([cx,cy,nx,ny]);
+      cx=nx;cy=ny;
+    }
+    bolts.push({segs,life:1,bright:Math.random()>.5});
+  }
+  for(let i=0;i<4;i++) setTimeout(mkBolt,i*80);
+  const anim=setInterval(()=>{
+    ctx.clearRect(0,0,cv.width,cv.height);
+    bolts.forEach((b,bi)=>{
+      b.life-=0.038;
+      b.segs.forEach(([x1,y1,x2,y2])=>{
+        ctx.save();
+        ctx.globalAlpha=b.life*(b.bright?1:.7);
+        ctx.strokeStyle=b.bright?'rgba(255,245,150,.98)':'rgba(140,210,255,.92)';
+        ctx.lineWidth=b.life*(b.bright?3:1.5);
+        ctx.shadowColor=b.bright?'rgba(255,245,0,.9)':'rgba(0,200,240,.85)';
+        ctx.shadowBlur=b.life*22;
+        ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+        ctx.restore();
+      });
+    });
+    bolts.forEach((b,i)=>{if(b.life<0)bolts.splice(i,1);});
+    if(frame%8===0&&bolts.length<8&&frame<90) mkBolt();
+    frame++;
+    if(frame>130){clearInterval(anim);ctx.clearRect(0,0,cv.width,cv.height);}
+  },22);
+}
+
+function startTimer(){
+  let s=120;clearInterval(OTP_T);
+  const resendBtn=document.getElementById('resend-btn');
+  if(resendBtn)resendBtn.disabled=true;
+  OTP_T=setInterval(()=>{s--;
+    const el=document.getElementById('timer');
+    if(el)el.textContent=`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+    if(s<=0){clearInterval(OTP_T);if(el)el.textContent='Expired';if(resendBtn)resendBtn.disabled=false;}
+  },1000);
+}
+
+/* ══════════════════════════════════════════════
+  PDF BILL DOWNLOAD (canvas-based, no server needed)
+══════════════════════════════════════════════ */
+function downloadBillPDF(){
+  if(!lastKWH||!lastUnits){toast('⚠️ Run a prediction first to generate a bill.');return;}
+  const now=new Date();
+  const bill=calcAPCPDCL(lastUnits,30);
+  const W=794,H=1180;
+  const cv=document.createElement('canvas');
+  cv.width=W;cv.height=H;
+  const ctx=cv.getContext('2d');
+
+  /* Background */
+  ctx.fillStyle='#020A14';ctx.fillRect(0,0,W,H);
+  /* Grid pattern */
+  ctx.strokeStyle='rgba(0,200,240,.04)';ctx.lineWidth=1;
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  /* Cyan top stripe */
+  const topGrad=ctx.createLinearGradient(0,0,W,0);
+  topGrad.addColorStop(0,'#00a8cc');topGrad.addColorStop(0.5,'#00c8f0');topGrad.addColorStop(1,'#00a8cc');
+  ctx.fillStyle=topGrad;ctx.fillRect(0,0,W,5);
+  /* Header bg */
+  ctx.fillStyle='rgba(4,16,32,.92)';ctx.fillRect(0,5,W,92);
+
+  function txt(t,x,y,font,color,align='left'){
+    ctx.font=font;ctx.fillStyle=color;ctx.textAlign=align;ctx.fillText(t,x,y);
+    ctx.textAlign='left';
+  }
+
+  /* APCPDCL header */
+  txt('APCPDCL',W/2,42,'bold 28px "Courier New",monospace','#00c8f0','center');
+  txt('ELECTRICITY BILL CUM NOTICE',W/2,62,'12px Arial,sans-serif','#7FB3CC','center');
+  txt('As Per APERC REG. NO. 5 of 2004',W/2,78,'10px Arial,sans-serif','rgba(0,200,240,.45)','center');
+  txt('Asking for Bribe? Call 14400',W/2,93,'italic 10px Arial','#FFD700','center');
+
+  /* Bottom cyan line of header */
+  ctx.fillStyle='rgba(0,200,240,.25)';ctx.fillRect(40,100,W-80,1);
+
+  /* Section title helper */
+  function secTitle(label,y){
+    ctx.fillStyle='rgba(0,200,240,.12)';ctx.fillRect(40,y,W-80,20);
+    ctx.strokeStyle='rgba(0,200,240,.35)';ctx.lineWidth=1;
+    ctx.strokeRect(40,y,W-80,20);
+    txt(label,50,y+14,'bold 9px "Courier New",monospace','#00c8f0');
+  }
+  /* Row helper */
+  function row(label,val,x,y,w,valColor){
+    txt(label,x,y,'11px Arial,sans-serif','#7FB3CC');
+    txt(val||'—',x+130,y,'11px Arial,sans-serif',valColor||'#D4EAF8');
+    ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(x,y+4);ctx.lineTo(x+w,y+4);ctx.stroke();
+  }
+  /* Bill amount row */
+  function billRow(label,val,y,color){
+    ctx.fillStyle='rgba(255,255,255,.025)';ctx.fillRect(40,y-14,W-80,20);
+    txt(label,50,y,'12px Arial,sans-serif','#7FB3CC');
+    txt(val,W-50,y,'12px "Courier New",monospace',color||'#D4EAF8','right');
+    ctx.strokeStyle='rgba(0,200,240,.07)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(40,y+5);ctx.lineTo(W-40,y+5);ctx.stroke();
+  }
+
+  let y=112;
+  /* Consumer section */
+  secTitle('CONSUMER DETAILS',y);y+=28;
+  const half=(W-80)/2;
+  const col2=40+half+20;
+  row('Consumer Name',USER.name||'Consumer',40,y,half);
+  row('Circle','PRAKASAM',col2,y,half);y+=22;
+  row('Email',USER.email||'—',40,y,half);
+  row('Bill Date',now.getDate()+' '+MONTHS[now.getMonth()]+' '+now.getFullYear(),col2,y,half);y+=22;
+  row('Gender',USER.gender||'—',40,y,half);
+  row('Billing Period',billingPeriod(now),col2,y,half);y+=22;
+  row('State',USER.state||'Andhra Pradesh',40,y,half);
+  row('Category','DOMESTIC (A)',col2,y,half);y+=22;
+  row('District',USER.district||'Prakasam',40,y,half);
+  row('Section','D3 ONGOLE',col2,y,half);y+=22;
+  row('Region / Village',USER.region||'—',40,y,half);
+  row('Connected Load','0.51 KW',col2,y,half);y+=16;
+
+  /* Meter section */
+  ctx.fillStyle='rgba(0,200,240,.2)';ctx.fillRect(40,y,W-80,1);y+=10;
+  secTitle('METER DETAILS',y);y+=28;
+  row('Billed Units',Math.round(lastUnits)+' kWh/0 Kvah',40,y,half);
+  row('Average Units',Math.round(lastUnits/30)+' kWh',col2,y,half);y+=22;
+  row('Bill Type','KWH BILLING',40,y,half);
+  row('Metering Type','LT SIDE',col2,y,half);y+=16;
+
+  /* Charges section */
+  ctx.fillStyle='rgba(0,200,240,.2)';ctx.fillRect(40,y,W-80,1);y+=10;
+  secTitle('CHARGES BREAKDOWN',y);y+=30;
+  billRow('Min / Energy Charges','₹ '+bill.ec,y);y+=22;
+  billRow('TOD Charges','₹ 0.00',y);y+=22;
+  billRow('Fixed Charges','₹ '+bill.fixed,y);y+=22;
+  billRow('Customer Charges','₹ '+bill.customer,y);y+=22;
+  billRow('Electricity Duty (3.16%)','₹ '+bill.ed,y);y+=22;
+  billRow('FPPCA Charges','₹ '+bill.fppca,y);y+=22;
+  billRow('Green Purchase Charges','₹ '+bill.green,y);y+=22;
+  billRow('Surcharge','₹ 0.00',y);y+=22;
+  billRow('Govt Subsidy','₹ 0.00',y,'#00e58a');y+=22;
+  billRow('Arrears','₹ 0.00',y);y+=16;
+
+  /* Total box */
+  ctx.fillStyle='rgba(0,200,240,.1)';
+  ctx.strokeStyle='rgba(0,200,240,.5)';ctx.lineWidth=1.5;
+  roundedRect(ctx,40,y,W-80,58,8);y+=14;
+  txt('TOTAL AMOUNT DUE',56,y+14,'bold 10px "Courier New",monospace','rgba(0,200,240,.7)');
+  txt('₹ '+bill.total,W-56,y+22,'bold 28px "Courier New",monospace','#00c8f0','right');
+  y+=60;
+
+  /* Dates row */
+  ctx.fillStyle='rgba(0,200,240,.15)';ctx.fillRect(40,y,W-80,1);y+=14;
+  txt('Due Date:',50,y,'11px Arial','#7FB3CC');
+  txt(dueDate(now),140,y,'11px Arial','#FFD700');
+  txt('Disconnection Date:',380,y,'11px Arial','#7FB3CC');
+  txt(discDate(now),530,y,'11px Arial','#FF3D5A');
+  y+=18;
+
+  /* Footer */
+  ctx.fillStyle='rgba(0,200,240,.06)';ctx.fillRect(0,y,W,H-y);
+  ctx.fillStyle='rgba(0,200,240,.18)';ctx.fillRect(0,y,W,1.5);y+=16;
+  txt('Make Digital Payment using Web / Mobile App',W/2,y,'11px Arial','#7FB3CC','center');y+=16;
+  txt('* This is an AI-predicted estimate based on APERC Domestic Cat-1 tariff rates. Actual bill may vary.',W/2,y,'9px Arial','rgba(0,200,240,.4)','center');y+=14;
+  txt('Powered by AI Energy Platform — aienergyplatform.in',W/2,y,'9px "Courier New",monospace','rgba(0,200,240,.3)','center');
+
+  /* Watermark */
+  ctx.save();ctx.translate(W/2,H/2);ctx.rotate(-Math.PI/6);
+  ctx.font='bold 62px "Courier New",monospace';ctx.fillStyle='rgba(0,200,240,.022)';
+  ctx.textAlign='center';ctx.fillText('AI ENERGY',0,0);ctx.fillText('ESTIMATED',0,70);
+  ctx.restore();
+
+  /* Download as PNG — open in browser then Ctrl+P → Save as PDF */
+  cv.toBlob(blob=>{
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const fname='APCPDCL_Bill_'+
+      (USER.name||'Consumer').replace(/\s+/g,'_')+'_'+
+      MONTHS[now.getMonth()].slice(0,3)+now.getFullYear()+'.png';
+    a.href=url;a.download=fname;
+    document.body.appendChild(a);a.click();
+    document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),3000);
+    toast('✅ Bill downloaded! Open the file and use Print → Save as PDF for PDF format.');
+  },'image/png',1.0);
+}
+
+function roundedRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();ctx.fill();ctx.stroke();
+}
+
+function odig(el,nid){el.value=el.value.replace(/[^0-9]/g,'');el.classList.toggle('ok',!!el.value);if(el.value&&nid)document.getElementById(nid)?.focus();}
+function obk(e,el,pid){if(e.key==='Backspace'&&!el.value&&pid)document.getElementById(pid)?.focus();}
+async function resendOTP(){
+  OTP='';
+  ['d1','d2','d3','d4','d5','d6'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.classList.remove('ok');}});
+  document.getElementById('oerr').textContent='';
+  await sendOTP();
+}
+
+/* ══════════════════════════════════════════════
+  SIGN OUT — working properly
+══════════════════════════════════════════════ */
+function signOut(){
+  /* Show animated sign-out overlay — no boring confirm() box */
+  const soOverlay=document.getElementById('signout-overlay');
+  const soName=document.getElementById('so-name');
+  if(soName) soName.textContent=USER.name||'User';
+  soOverlay.classList.add('on');
+  soOverlay.style.background='rgba(2,10,20,0)';
+  /* Fade in background */
+  setTimeout(()=>{ soOverlay.style.background='rgba(2,10,20,.97)'; },20);
+  /* Run lightning bolts on the signout canvas */
+  runSignOutBolts();
+  /* After 2.2s: clear everything and go to landing page */
+  setTimeout(()=>{
+    /* Clear session data */
+    const name=USER.name;
+    USER={name:'',gender:'',email:'',state:'',district:'',region:''};
+    predictions=[];lastKWH=0;lastUnits=0;
+    /* Reset all name chips */
+    ['ua1','ua2','ua3','ua4'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='?';});
+    ['un1','un2','un3','un4'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='Guest';});
+    /* Reset form fields */
+    ['inp-name','inp-email','inp-state','inp-district','inp-region'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+    const gEl=document.getElementById('inp-gender');if(gEl)gEl.value='';
+    ['d1','d2','d3','d4','d5','d6'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.classList.remove('ok');}});
+    /* Fade out overlay and go home */
+    soOverlay.style.transition='background .4s,opacity .4s';
+    soOverlay.style.opacity='0';
+    setTimeout(()=>{
+      soOverlay.classList.remove('on');
+      soOverlay.style.opacity='1';
+      soOverlay.style.transition='';
+      showPage('p1');
+    },450);
+  }, 2200);
+}
+
+function runSignOutBolts(){
+  const cv=document.getElementById('signout-bolt-canvas');
+  if(!cv) return;
+  cv.width=window.innerWidth; cv.height=window.innerHeight;
+  const ctx=cv.getContext('2d');
+  const bolts=[];
+  let frame=0;
+  function mkBolt(color){
+    const sx=Math.random()*cv.width;
+    const segs=[]; let bx=sx,by=0;
+    for(let i=0;i<16;i++){
+      const nx=bx+(Math.random()-.5)*100;
+      const ny=by+cv.height/16+(Math.random()-.5)*18;
+      segs.push([bx,by,nx,ny]); bx=nx; by=ny;
+    }
+    bolts.push({segs,life:1,color:color||'rgba(0,200,240,.95)'});
+  }
+  /* Initial burst — 6 bolts */
+  for(let i=0;i<6;i++) setTimeout(()=>mkBolt(i%2===0?'rgba(0,200,240,.95)':'rgba(255,215,0,.9)'),i*60);
+  const anim=setInterval(()=>{
+    ctx.clearRect(0,0,cv.width,cv.height);
+    /* Subtle electric glow bg */
+    ctx.fillStyle=`rgba(0,200,240,${0.01+Math.sin(frame*.15)*.008})`;
+    ctx.fillRect(0,0,cv.width,cv.height);
+    bolts.forEach(b=>{
+      b.life-=0.04;
+      b.segs.forEach(([x1,y1,x2,y2])=>{
+        ctx.save();
+        ctx.globalAlpha=Math.max(0,b.life);
+        ctx.strokeStyle=b.color;
+        ctx.lineWidth=b.life*2.5;
+        ctx.shadowColor=b.color;
+        ctx.shadowBlur=b.life*20;
+        ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+        ctx.restore();
+      });
+    });
+    /* Remove dead bolts */
+    for(let i=bolts.length-1;i>=0;i--) if(bolts[i].life<=0) bolts.splice(i,1);
+    /* Spawn new ones periodically */
+    if(frame%10===0&&frame<80) mkBolt(frame%3===0?'rgba(255,215,0,.9)':'rgba(0,200,240,.95)');
+    frame++;
+    if(frame>100){clearInterval(anim);ctx.clearRect(0,0,cv.width,cv.height);}
+  },22);
+}
+
+/* ══════════════════════════════════════════════
+  HISTORY HELPERS
+══════════════════════════════════════════════ */
+function loadHistory(){
+  if(!USER.email)return;
+  try{const d=localStorage.getItem('aienergy_v4_'+USER.email);if(d)predictions=JSON.parse(d);}catch(e){}
+}
+function saveHistory(){
+  if(!USER.email)return;
+  try{localStorage.setItem('aienergy_v4_'+USER.email,JSON.stringify(predictions));}catch(e){}
+}
+
+/* ══════════════════════════════════════════════
+  INIT
+══════════════════════════════════════════════ */
+ug();
+setInterval(()=>{if(document.getElementById('p5').classList.contains('on'))updateAT();},10000);
+</script>
+</body>
+</html>
