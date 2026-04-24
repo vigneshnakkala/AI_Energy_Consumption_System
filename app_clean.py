@@ -6,12 +6,7 @@ import datetime
 import io, base64
 import matplotlib.pyplot as plt
 import os
-
-# ✅ SAFE DATABASE IMPORT (FIX)
-try:
-    from database import mydb
-except:
-    mydb = None
+import psycopg2
 
 # Try ML model
 try:
@@ -23,6 +18,17 @@ app = Flask(__name__)
 app.secret_key = "123456"
 
 otp_store = {}
+
+# ======================
+# DATABASE CONNECTION (NEW)
+# ======================
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        return conn
+    except Exception as e:
+        print("DB ERROR:", e)
+        return None
 
 # ======================
 # BILL CALCULATION
@@ -59,7 +65,6 @@ def send_otp_email(to_email, otp, name):
     app_password = os.getenv("EMAIL_PASS")
 
     if not sender_email or not app_password:
-        print("⚠️ EMAIL NOT CONFIGURED")
         print(f"OTP for {to_email}: {otp}")
         return
 
@@ -86,7 +91,7 @@ This OTP is valid for 2 minutes.
         server.quit()
         print("✅ OTP SENT")
     except Exception as e:
-        print("❌ EMAIL ERROR:", e)
+        print("EMAIL ERROR:", e)
 
 # ======================
 # ROUTES
@@ -150,7 +155,7 @@ def home():
     return render_template("home.html")
 
 # ======================
-# PREDICTION
+# PREDICTION (UPDATED WITH DB)
 # ======================
 @app.route('/prediction', methods=['GET', 'POST'])
 def prediction():
@@ -181,6 +186,24 @@ def prediction():
 
             cost = calculate_bill(predicted_value)
 
+            # ✅ STORE IN DATABASE
+            conn = get_db_connection()
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS energy_predictions (
+                        id SERIAL PRIMARY KEY,
+                        predicted_value FLOAT
+                    )
+                """)
+                cursor.execute(
+                    "INSERT INTO energy_predictions (predicted_value) VALUES (%s)",
+                    (predicted_value,)
+                )
+                conn.commit()
+                cursor.close()
+                conn.close()
+
             return render_template(
                 'prediction.html',
                 prediction_text=f"{predicted_value:.2f}",
@@ -194,17 +217,21 @@ def prediction():
     return render_template('prediction.html')
 
 # ======================
-# GRAPH (SAFE FIX)
+# GRAPH (UPDATED)
 # ======================
 @app.route("/graph")
 def graph():
 
-    if mydb is None:
+    conn = get_db_connection()
+    if not conn:
         return render_template("graph.html", graph_url=None)
 
-    cursor = mydb.cursor()
+    cursor = conn.cursor()
     cursor.execute("SELECT predicted_value FROM energy_predictions")
     data = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
 
     if not data:
         return render_template("graph.html", graph_url=None)

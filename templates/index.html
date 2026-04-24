@@ -416,7 +416,7 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #071830 inset;-webkit-tex
 /* ══════════════ OTP ANIMATIONS ══════════════ */
 @keyframes oaIcon{0%{transform:scale(0) rotate(-20deg);}100%{transform:scale(1) rotate(0deg);}}
 
-/* ══════════════ SIGN OUT ANIMATION ══════════════ */
+/* ═════════════ SIGN OUT ANIMATION ═════════════ */
 #signout-overlay{
   position:fixed;inset:0;z-index:9995;
   display:none;flex-direction:column;align-items:center;justify-content:center;
@@ -425,22 +425,36 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #071830 inset;-webkit-tex
   pointer-events:none;
 }
 #signout-overlay.on{display:flex;pointer-events:all;}
+
 #signout-content{
   position:relative;z-index:2;text-align:center;
   opacity:0;transform:scale(.7) translateY(30px);
   transition:opacity .4s,transform .4s;
 }
-#signout-overlay.on #signout-content{opacity:1;transform:scale(1) translateY(0);}
-#signout-bolt-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+#signout-overlay.on #signout-content{
+  opacity:1;
+  transform:scale(1) translateY(0);
+}
+
+#signout-bolt-canvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+}
+
 @keyframes soFadeOut{
-  0%  {opacity:1;transform:scale(1);}
-  60% {opacity:1;transform:scale(1.05);}
+  0%{opacity:1;transform:scale(1);}
+  60%{opacity:1;transform:scale(1.05);}
   100%{opacity:0;transform:scale(1.15);}
 }
+
 @keyframes soSlideAway{
-  0%  {opacity:1;transform:translateY(0) scale(1);}
+  0%{opacity:1;transform:translateY(0) scale(1);}
   100%{opacity:0;transform:translateY(-40px) scale(.9);}
 }
+
 @keyframes otpShake{
   0%,100%{transform:translateX(0);}
   12%{transform:translateX(-12px);}
@@ -451,13 +465,44 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #071830 inset;-webkit-tex
   75%{transform:translateX(4px);}
   87%{transform:translateX(-2px);}
 }
+
+@keyframes thunderFlash{
+  0%,100%{opacity:0;}
+  15%,35%{opacity:1;}
+  25%,45%{opacity:0;}
+}
+
+.otp-sent-pulse{animation:otpPulse 1.2s ease-out 3;}
+
+@keyframes otpPulse{
+  0%{box-shadow:0 0 0 0 rgba(0,200,240,.7);}
+  70%{box-shadow:0 0 0 20px rgba(0,200,240,0);}
+  100%{box-shadow:0 0 0 0 rgba(0,200,240,0);}
+}
+
+.otp-verified-glow{animation:verGlow .8s ease-out;}
+
+@keyframes verGlow{
+  0%{box-shadow:0 0 0 0 rgba(0,229,138,.8);}
+  100%{box-shadow:0 0 60px 0 rgba(0,229,138,0);}
+}
+
+.otp-fail-shake{animation:failShake .4s ease-out;}
+
+@keyframes failShake{
+  0%,100%{transform:translateX(0);}
+  20%{transform:translateX(-10px);}
+  40%{transform:translateX(10px);}
+  60%{transform:translateX(-6px);}
+  80%{transform:translateX(6px);}
+}
 @keyframes thunderFlash{0%,100%{opacity:0;}15%,35%{opacity:1;}25%,45%{opacity:0;}}
 .otp-sent-pulse{animation:otpPulse 1.2s ease-out 3;}
 @keyframes otpPulse{0%{box-shadow:0 0 0 0 rgba(0,200,240,.7);}70%{box-shadow:0 0 0 20px rgba(0,200,240,0);}100%{box-shadow:0 0 0 0 rgba(0,200,240,0);}}
 .otp-verified-glow{animation:verGlow .8s ease-out;}
 @keyframes verGlow{0%{box-shadow:0 0 0 0 rgba(0,229,138,.8);}100%{box-shadow:0 0 60px 0 rgba(0,229,138,0);}}
 .otp-fail-shake{animation:failShake .4s ease-out;}
-@keyframes failShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-10px);}40%{transform:translateX(10px);}60%{transform:translateX(-6px);}80%{transform:translateX(6px);}}
+@keyframes failShake{0%,100%{transform:translateX(0);}20%{transform:translateX(-10px);}40%{transform:translateX(10px);}60%{transform:translateX(-6px);}80%{transform:translateX(6px);}}* ═
 
 /* ══════════════ PDF DOWNLOAD BUTTON ══════════════ */
 .pdf-dl-btn{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;margin-top:14px;padding:14px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;border:none;border-radius:10px;background:linear-gradient(135deg,var(--green),#00a86b);color:#020a14;cursor:none;transition:transform .15s,box-shadow .2s;}
@@ -485,18 +530,30 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #071830 inset;-webkit-tex
 
 <!-- OTP SENT ANIMATION OVERLAY -->
 <div id="otp-anim-overlay" style="position:fixed;inset:0;z-index:9990;display:none;align-items:center;justify-content:center;flex-direction:column;gap:0;background:rgba(2,10,20,.96);backdrop-filter:blur(16px);">
-  <!-- Thunder canvas -->
   <canvas id="thunder-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
+  
   <div id="otp-anim-content" style="position:relative;z-index:2;text-align:center;max-width:400px;padding:20px;">
-    <div id="otp-anim-icon" style="font-size:80px;margin-bottom:16px;animation:oaIcon .5s cubic-bezier(.68,-0.55,.27,1.55);"></div>
-    <div id="otp-anim-title" style="font-family:'Orbitron',monospace;font-size:clamp(18px,4vw,26px);font-weight:900;color:#fff;margin-bottom:10px;letter-spacing:1px;"></div>
-    <div id="otp-anim-sub" style="font-size:14px;color:rgba(212,234,248,.65);line-height:1.65;margin-bottom:22px;"></div>
-    <div id="otp-anim-email" style="font-family:'Orbitron',monospace;font-size:12px;padding:8px 20px;border-radius:20px;background:rgba(0,200,240,.08);border:1px solid rgba(0,200,240,.22);color:var(--elec);display:inline-block;margin-bottom:20px;"></div>
-    <button id="otp-anim-btn" style="padding:13px 32px;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;border:none;border-radius:10px;cursor:none;transition:transform .15s,box-shadow .2s;" onclick="closeOTPAnim()"></button>
+    <div id="otp-anim-icon"></div>
+    <div id="otp-anim-title"></div>
+    <div id="otp-anim-sub"></div>
+    <div id="otp-anim-email"></div>
+    <button id="otp-anim-btn" onclick="closeOTPAnim()"></button>
   </div>
 </div>
-@keyframes oaIcon{0%{transform:scale(0) rotate(-20deg);}100%{transform:scale(1) rotate(0deg);}}
+<style>
+#otp-anim-icon {
+  font-size: 80px;
+  margin-bottom: 16px;
+  animation: oaIcon .5s cubic-bezier(.68,-0.55,.27,1.55);
+}
 
+@keyframes oaIcon {
+  0% { transform: scale(0) rotate(-20deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+</style>
+
+<style>
 /* ══════════════ SIGN OUT ANIMATION ══════════════ */
 #signout-overlay{
   position:fixed;inset:0;z-index:9995;
@@ -513,15 +570,18 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #071830 inset;-webkit-tex
 }
 #signout-overlay.on #signout-content{opacity:1;transform:scale(1) translateY(0);}
 #signout-bolt-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+
 @keyframes soFadeOut{
-  0%  {opacity:1;transform:scale(1);}
-  60% {opacity:1;transform:scale(1.05);}
+  0%{opacity:1;transform:scale(1);}
+  60%{opacity:1;transform:scale(1.05);}
   100%{opacity:0;transform:scale(1.15);}
 }
+
 @keyframes soSlideAway{
-  0%  {opacity:1;transform:translateY(0) scale(1);}
+  0%{opacity:1;transform:translateY(0) scale(1);}
   100%{opacity:0;transform:translateY(-40px) scale(.9);}
 }
+
 @keyframes otpShake{
   0%,100%{transform:translateX(0);}
   12%{transform:translateX(-12px);}
@@ -532,25 +592,76 @@ input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #071830 inset;-webkit-tex
   75%{transform:translateX(4px);}
   87%{transform:translateX(-2px);}
 }
+</style>
+<!-- SIGN OUT ANIMATION -->
+<div id="signout-overlay">
+  <canvas id="signout-bolt-canvas"></canvas>
+  
+  <div id="signout-content">
+    <div class="so-icon">⚡</div>
 
-<!-- SIGN OUT ANIMATED OVERLAY -->
-<div id="signout-overlay" style="position:fixed;inset:0;z-index:9995;display:none;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,10,20,0);transition:background .3s;">
-  <canvas id="signout-bolt-canvas" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;"></canvas>
-  <div id="signout-content" style="position:relative;z-index:2;text-align:center;opacity:0;transform:scale(.75) translateY(28px);transition:opacity .4s .1s,transform .4s .1s;">
-    <div style="font-size:78px;margin-bottom:14px;filter:drop-shadow(0 0 32px var(--elec));">⚡</div>
-    <div style="font-family:'Orbitron',monospace;font-size:clamp(22px,4vw,36px);font-weight:900;color:#fff;letter-spacing:3px;margin-bottom:12px;text-shadow:0 0 28px rgba(0,200,240,.8);">SIGNING OUT</div>
-    <div style="font-size:15px;color:rgba(212,234,248,.7);margin-bottom:28px;line-height:1.7;">Goodbye, <span id="so-name" style="color:var(--elec);font-weight:700;font-size:16px;"></span>!<br>Your session has been safely cleared.</div>
-    <div style="display:flex;gap:10px;justify-content:center;align-items:center;">
-      <div style="width:10px;height:10px;border-radius:50%;background:var(--elec);animation:dPulse .6s ease-in-out infinite;"></div>
-      <div style="width:10px;height:10px;border-radius:50%;background:var(--elec);animation:dPulse .6s ease-in-out .22s infinite;"></div>
-      <div style="width:10px;height:10px;border-radius:50%;background:var(--elec);animation:dPulse .6s ease-in-out .44s infinite;"></div>
+    <div class="so-title">SIGNING OUT</div>
+
+    <div class="so-text">
+      Goodbye, <span id="so-name"></span>!<br>
+      Your session has been safely cleared.
+    </div>
+
+    <div class="so-dots">
+      <div></div>
+      <div></div>
+      <div></div>
     </div>
   </div>
 </div>
+
 <style>
-#signout-overlay.on{display:flex!important;}
-#signout-overlay.on #signout-content{opacity:1!important;transform:scale(1) translateY(0)!important;}
-@keyframes dPulse{0%,100%{opacity:.22;transform:scale(.65);}50%{opacity:1;transform:scale(1.35);}}
+/* SIGN OUT ANIMATION */
+
+#signout-overlay{
+  position:fixed;
+  inset:0;
+  z-index:9995;
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  background:rgba(2,10,20,0);
+  transition:background .3s;
+  pointer-events:none;
+}
+
+#signout-overlay.on{
+  display:flex;
+  pointer-events:all;
+}
+
+#signout-content{
+  position:relative;
+  z-index:2;
+  text-align:center;
+  opacity:0;
+  transform:scale(.7) translateY(30px);
+  transition:opacity .4s, transform .4s;
+}
+
+#signout-overlay.on #signout-content{
+  opacity:1;
+  transform:scale(1) translateY(0);
+}
+
+#signout-bolt-canvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+}
+
+@keyframes dPulse{
+  0%,100%{opacity:.22;transform:scale(.65);}
+  50%{opacity:1;transform:scale(1.35);}
+}
 </style>
 
 <!-- PAGE 1 — LANDING -->
